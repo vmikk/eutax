@@ -20,3 +20,8 @@ RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN pip install --no-cache-dir -r requirements.txt
+
