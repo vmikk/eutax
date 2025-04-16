@@ -35,6 +35,70 @@ DEFAULT_VSEARCH_PARAMS = {
 }
 
 
+async def run_annotation(job_id: str):
+    """
+    Run the annotation job asynchronously.
+    """
+    job_data = database.get_job(job_id)
+    if not job_data:
+        logger.error(f"Job {job_id} not found")
+        return
+
+    # Update job status to running
+    database.update_job_status(job_id, JobStatusEnum.RUNNING)
+    
+    # Get parameters
+    file_id = job_data["file_id"]
+    tool = job_data["tool"]
+    algorithm = job_data["algorithm"]
+    db_path = job_data["database"]
+    parameters = job_data["parameters"]
+    
+    # Get input file path
+    input_file = database.get_upload(file_id)
+    if not input_file or not os.path.exists(input_file):
+        database.update_job_status(job_id, JobStatusEnum.FAILED)
+        logger.error(f"Input file {input_file} for job {job_id} not found")
+        return
+
+    # Create job output directory
+    job_output_dir = os.path.join(OUTPUT_DIR, job_id)
+    os.makedirs(job_output_dir, exist_ok=True)
+    
+    try:
+        # Run taxonomic annotation
+        if tool.lower() == "blast":
+            output_path = run_blast(
+                input_file, 
+                job_output_dir, 
+                algorithm, 
+                db_path or DEFAULT_BLAST_DB, 
+                parameters
+            )
+        elif tool.lower() == "vsearch":
+            output_path = run_vsearch(
+                input_file, 
+                job_output_dir, 
+                db_path or DEFAULT_UDB_DB, 
+                parameters
+            )
+        else:
+            raise ValueError(f"Unsupported tool: {tool}")
+        
+        # Update job status to finished
+        database.update_job_status(job_id, JobStatusEnum.FINISHED)
+        
+        # Save output path
+        if 'output_path' in job_data:
+            job_data["output_path"] = output_path
+        
+        logger.info(f"Job {job_id} completed successfully")
+    
+    except Exception as e:
+        database.update_job_status(job_id, JobStatusEnum.FAILED)
+        logger.error(f"Error running job {job_id}: {str(e)}")
+
+
 def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> str:
     """
     Run BLAST command and return output file path.
