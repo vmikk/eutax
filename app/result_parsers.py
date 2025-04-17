@@ -24,7 +24,7 @@ from pathlib import Path
 #  10. send        end of alignment in subject
 #  11. evalue      expect value
 #  12. bitscore    bit score
-#  13. qcovhsp     Query Coverage Per HSP
+#  13. qcovs       Query Coverage Per Subject
 #  14. sstrand     Subject Strand
 #  15. slen        Subject sequence length
 #  16. qlen        Query sequence length
