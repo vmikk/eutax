@@ -101,3 +101,89 @@ def format_alignment(qseq: str, sseq: str) -> Dict[str, Any]:
     }
 
 
+def parse_blast_results(file_path: str) -> Dict[str, Any]:
+    """
+    Parse BLAST output file and convert to structured JSON format.
+    
+    Args:
+        file_path: Path to the BLAST output file
+        
+    Returns:
+        Dictionary with parsed results grouped by query ID
+    """
+    # Define column names
+    columns = [
+        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+        "qcovs", "sstrand", "qlen", "slen", "qseq", "sseq"
+    ]
+    
+    # Read the tab-delimited file
+    try:
+        df = pd.read_csv(file_path, sep='\t', names=columns, header=None)
+    except Exception as e:
+        return {"error": f"Failed to parse BLAST results: {str(e)}"}
+    
+    if df.empty:
+        return {"results": [], "summary": {"total_queries": 0, "total_hits": 0}}
+    
+    # Group by query ID
+    result = {"results": [], "summary": {}}
+    query_groups = df.groupby("qseqid")
+    
+    for query_id, group in query_groups:
+        # Convert the group to records for easier processing
+        hits = []
+        
+        for _, row in group.iterrows():
+            # Parse taxonomy from sseqid
+            taxonomy = parse_sseqid(row["sseqid"])
+            
+            # Format the alignment
+            alignment = format_alignment(row["qseq"], row["sseq"])
+            
+            # Create a hit entry
+            hit = {
+                "sseqid": row["sseqid"],
+                "taxonomy": taxonomy,
+                "pident": float(row["pident"]),
+                "length": int(row["length"]),
+                "mismatch": int(row["mismatch"]),
+                "gapopen": int(row["gapopen"]),
+                "qstart": int(row["qstart"]),
+                "qend": int(row["qend"]),
+                "sstart": int(row["sstart"]),
+                "send": int(row["send"]),
+                "evalue": float(row["evalue"]),
+                "bitscore": float(row["bitscore"]),
+                "qcovs": float(row["qcovs"]) if not pd.isna(row["qcovs"]) else None,
+                "sstrand": row["sstrand"],
+                "qlen": int(row["qlen"]) if not pd.isna(row["qlen"]) else None,
+                "slen": int(row["slen"]) if not pd.isna(row["slen"]) else None,
+                "alignment": alignment
+            }
+            
+            hits.append(hit)
+        
+        # Sort hits by bitscore (descending) and evalue (ascending)
+        hits.sort(key=lambda x: (-x["bitscore"], x["evalue"]))
+        
+        # Add to results
+        query_result = {
+            "query_id": query_id,
+            "query_length": int(group["qlen"].iloc[0]) if not pd.isna(group["qlen"].iloc[0]) else None,
+            "hit_count": len(hits),
+            "hits": hits
+        }
+        
+        result["results"].append(query_result)
+    
+    # Add summary information
+    result["summary"] = {
+        "total_queries": len(query_groups),
+        "total_hits": len(df)
+    }
+    
+    return result
+
+
