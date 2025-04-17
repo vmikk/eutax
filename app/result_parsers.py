@@ -59,3 +59,25 @@ def parse_sseqid(sseqid: str) -> Dict[str, str]:
     return taxonomy
 
 
+def generate_midline(qseq: str, sseq: str) -> str:
+    """
+    Generate a midline string for alignment display showing matches and mismatches.
+    
+    Args:
+        qseq: Query sequence (aligned part)
+        sseq: Subject sequence (aligned part)
+        
+    Returns:
+        Midline string with '|' for matches and ' ' for mismatches
+    """
+    midline = []
+    for q, s in zip(qseq.upper(), sseq.upper()):
+        if q == s:
+            midline.append('|')
+        else:
+            # Gap in either sequences or mismatch
+            midline.append(' ')
+            
+    return ''.join(midline)
+
+
