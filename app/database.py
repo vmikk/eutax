@@ -45,6 +45,7 @@ def save_job(job_id: str, file_id: str, tool: str, algorithm: str, database: str
         "completed_at": None,
         "progress": None,
         "output_path": None,
+        "result_files": None,
     }
 
 
@@ -66,6 +67,29 @@ def update_job_status(job_id: str, status: JobStatusEnum, progress: Optional[str
     if status in [JobStatusEnum.FINISHED, JobStatusEnum.FAILED]:
         jobs[job_id]["completed_at"] = datetime.now()
     
+    return True
+
+
+def update_job_results(job_id: str, result_files: Dict[str, str]) -> bool:
+    """
+    Update job with result file paths
+    
+    Args:
+        job_id: Unique job identifier
+        result_files: Dictionary of result file paths (e.g., {"raw": "/path/to/raw.txt", "json": "/path/to/results.json"})
+        
+    Returns:
+        Boolean indicating success or failure
+    """
+    if job_id not in jobs:
+        return False
+    
+    jobs[job_id]["result_files"] = result_files
+    
+    # For backward compatibility, also set the output_path
+    if "raw" in result_files:
+        jobs[job_id]["output_path"] = result_files["raw"]
+        
     return True
 
 
