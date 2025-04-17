@@ -115,9 +115,9 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
     # Set output files
     results_file = os.path.join(output_dir, "res_blast.txt")
     
-    # Output format
+    # Output format (with extra columns 13+)
     outfmt = "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore " \
-             "qcovhsp sstrand qlen slen qseq sseq"
+             "qcovs sstrand qlen slen qseq sseq"
 
     #   1. qseqid      query or source (gene) sequence id
     #   2. sseqid      subject or target (reference genome) sequence id
@@ -131,10 +131,10 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
     #  10. send        end of alignment in subject
     #  11. evalue      expect value
     #  12. bitscore    bit score
-    #  13. qcovhsp     Query Coverage Per HSP
+    #  13. qcovs       Query Coverage Per Subject
     #  14. sstrand     Subject Strand
-    #  15. slen        Subject sequence length
-    #  16. qlen        Query sequence length
+    #  15. qlen        Query sequence length
+    #  16. slen        Subject sequence length
     #  17. qseq        Aligned part of query sequence
     #  18. sseq        Aligned part of subject sequence
 
