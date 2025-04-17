@@ -1,3 +1,8 @@
+"""
+Models module - defines Pydantic models and enums for request validation,
+response serialization, and data typing throughout the application.
+"""
+
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from enum import Enum

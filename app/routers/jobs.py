@@ -1,3 +1,8 @@
+"""
+Jobs router module - provides API endpoints for creating, monitoring, and listing
+annotation jobs, including background task handling.
+"""
+
 import uuid
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from typing import Optional

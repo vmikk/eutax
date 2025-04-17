@@ -1,3 +1,8 @@
+"""
+Runner module for executing taxonomic annotation jobs - handles BLAST and VSEARCH command execution,
+manages job output, and provides background task processing functionality.
+"""
+
 import os
 import subprocess
 import tempfile

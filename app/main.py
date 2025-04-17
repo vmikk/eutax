@@ -1,3 +1,8 @@
+"""
+Main application file for EUTAX API - initializes FastAPI app, sets up middleware, 
+includes routers, and defines basic endpoints.
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

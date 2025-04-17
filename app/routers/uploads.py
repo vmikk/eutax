@@ -1,3 +1,8 @@
+"""
+Uploads router module - handles file upload endpoints for FASTA sequences,
+including validation, storage, and file ID management.
+"""
+
 import os
 import shutil
 import uuid

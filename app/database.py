@@ -1,3 +1,8 @@
+"""
+Database module for managing data persistence - handles storage of uploaded files,
+job information, and provides CRUD operations for the application's data.
+"""
+
 from typing import Dict, List, Optional
 import os
 from datetime import datetime
