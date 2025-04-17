@@ -187,3 +187,23 @@ def parse_blast_results(file_path: str) -> Dict[str, Any]:
     return result
 
 
+def parse_blast_file_to_json(file_path: str, output_path: Optional[str] = None) -> str:
+    """
+    Parse a BLAST output file and save the results as JSON.
+    
+    Args:
+        file_path: Path to the BLAST output file
+        output_path: Optional path to save the JSON output (if None, JSON is returned as string)
+        
+    Returns:
+        JSON string or file path where JSON was saved
+    """
+    results = parse_blast_results(file_path)
+    
+    if output_path:
+        with open(output_path, 'w') as f:
+            json.dump(results, f, indent=2)
+        return output_path
+    else:
+        return json.dumps(results, indent=2)
+
