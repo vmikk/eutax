@@ -11,6 +11,7 @@ import uuid
 import logging
 from app.models.models import JobStatusEnum
 from app import database
+from app.result_parsers import parse_blast_file_to_json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +43,7 @@ DEFAULT_VSEARCH_PARAMS = {
 
 async def run_annotation(job_id: str):
     """
-    Run the annotation job asynchronously.
+    Run the annotation and parse the results.
     """
     job_data = database.get_job(job_id)
     if not job_data:
@@ -80,6 +81,18 @@ async def run_annotation(job_id: str):
                 db_path or DEFAULT_BLAST_DB, 
                 parameters
             )
+            
+            # Parse the BLAST results and save as JSON
+            json_output_path = os.path.join(job_output_dir, "results.json")
+            parse_blast_file_to_json(output_path, json_output_path)
+            logger.info(f"Parsed BLAST results saved to {json_output_path}")
+            
+            # Add the JSON output path to the job data
+            result_files = {
+                "raw": output_path,
+                "json": json_output_path
+            }
+            
         elif tool.lower() == "vsearch":
             output_path = run_vsearch(
                 input_file, 
@@ -87,15 +100,21 @@ async def run_annotation(job_id: str):
                 db_path or DEFAULT_UDB_DB, 
                 parameters
             )
+            
+            # For now, just store the raw output path for VSEARCH
+            # TODO: Implement VSEARCH result parsing
+            result_files = {
+                "raw": output_path
+            }
+            
         else:
             raise ValueError(f"Unsupported tool: {tool}")
         
         # Update job status to finished
         database.update_job_status(job_id, JobStatusEnum.FINISHED)
         
-        # Save output path
-        if 'output_path' in job_data:
-            job_data["output_path"] = output_path
+        # Save output paths
+        database.update_job_results(job_id, result_files)
         
         logger.info(f"Job {job_id} completed successfully")
     
