@@ -26,8 +26,8 @@ from pathlib import Path
 #  12. bitscore    bit score
 #  13. qcovs       Query Coverage Per Subject
 #  14. sstrand     Subject Strand
-#  15. slen        Subject sequence length
-#  16. qlen        Query sequence length
+#  15. qlen        Query sequence length
+#  16. slen        Subject sequence length
 #  17. qseq        Aligned part of query sequence
 #  18. sseq        Aligned part of subject sequence
 
