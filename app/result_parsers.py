@@ -81,3 +81,23 @@ def generate_midline(qseq: str, sseq: str) -> str:
     return ''.join(midline)
 
 
+def format_alignment(qseq: str, sseq: str) -> Dict[str, Any]:
+    """
+    Format alignment data for display in the frontend.
+    
+    Args:
+        qseq: Query sequence
+        sseq: Subject sequence
+    
+    Returns:
+        Dictionary with formatted alignment information
+    """
+    midline = generate_midline(qseq, sseq)
+    
+    return {
+        "qseq": qseq,
+        "midline": midline,
+        "sseq": sseq
+    }
+
+
