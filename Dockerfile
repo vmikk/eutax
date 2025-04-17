@@ -20,8 +20,27 @@ RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
+WORKDIR /app
+
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application code
+COPY . .
+
+# Create directories for uploads and outputs
+RUN mkdir -p uploads outputs
+
+# Set environment variables
+ENV UPLOAD_DIR=/app/uploads
+ENV OUTPUT_DIR=/app/outputs
+ENV PYTHONUNBUFFERED=1
+
+# Expose port
+EXPOSE 8000
+
+# Run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
