@@ -1,11 +1,9 @@
 FROM python:3.12.10
 
 # Install system dependencies, along with BLAST and VSEARCH
-# RUN apt-get update \
-#   && apt-get install -y alien \
-#   && ...
-
-RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
+RUN apt-get update \
+  && apt-get install -y less \
+  && wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
   && tar -xzf "blast.tar.gz" \
   && rm -f "blast.tar.gz" \
   && mv ncbi-blast-2.16.0+/bin/* /usr/bin/ \
@@ -29,7 +27,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY app/ /app/app/
+COPY run.py /app/
 
 # Create directories for uploads and outputs
 RUN mkdir -p uploads outputs
