@@ -81,6 +81,30 @@ async def get_job_status(job_id: str):
     )
 
 
+@router.get("/jobs/{job_id}/results/json")
+async def get_job_results_json(job_id: str):
+    """
+    Download the job results in JSON format.
+    Returns the results.json file created during job processing.
+    """
+    job_data = database.get_job(job_id)
+    if not job_data:
+        raise HTTPException(status_code=404, detail={
+            "error": {
+                "code": 404,
+                "message": f"Job ID '{job_id}' not found."
+            }
+        })
+    json_path = job_data["result_files"]["json"]
+    
+    # Return the file as a download
+    return FileResponse(
+        path=json_path,
+        filename=f"job_{job_id}_results.json",
+        media_type="application/json"
+    )
+
+
 @router.get("/jobs", response_model=JobListResponse)
 async def list_jobs(
     status: Optional[str] = Query(None, description="Filter jobs by status: queued, running, finished, failed"),
