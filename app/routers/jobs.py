@@ -4,7 +4,9 @@ annotation jobs, including background task handling.
 """
 
 import uuid
+import os
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, FileResponse
 from typing import Optional
 
 from app.models.models import (
@@ -95,6 +97,16 @@ async def get_job_results_json(job_id: str):
                 "message": f"Job ID '{job_id}' not found."
             }
         })
+    
+    # Check job status
+    if job_data["status"] != JobStatusEnum.FINISHED:
+        raise HTTPException(status_code=400, detail={
+            "error": {
+                "code": 400,
+                "message": f"Job is not finished yet. Current status: {job_data['status']}"
+            }
+        })
+    
     json_path = job_data["result_files"]["json"]
     
     # Return the file as a download
