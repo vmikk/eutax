@@ -107,7 +107,23 @@ async def get_job_results_json(job_id: str):
             }
         })
     
+    # Check if JSON results exist
+    if not job_data.get("result_files") or "json" not in job_data["result_files"]:
+        raise HTTPException(status_code=404, detail={
+            "error": {
+                "code": 404,
+                "message": "JSON results not available for this job"
+            }
+        })
+    
     json_path = job_data["result_files"]["json"]
+    if not os.path.exists(json_path):
+        raise HTTPException(status_code=404, detail={
+            "error": {
+                "code": 404,
+                "message": "JSON results file not found"
+            }
+        })
     
     # Return the file as a download
     return FileResponse(
