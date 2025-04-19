@@ -158,7 +158,6 @@ def parse_blast_results(file_path: str) -> Dict[str, Any]:
                 "bitscore": float(row["bitscore"]),
                 "qcovs": float(row["qcovs"]) if not pd.isna(row["qcovs"]) else None,
                 "sstrand": row["sstrand"],
-                "qlen": int(row["qlen"]) if not pd.isna(row["qlen"]) else None,
                 "slen": int(row["slen"]) if not pd.isna(row["slen"]) else None,
                 "alignment": alignment
             }
