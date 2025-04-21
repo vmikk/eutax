@@ -44,8 +44,8 @@ DEFAULT_UDB_DB = os.environ.get("UDB_DB", "/mnt/Data/DB/EUKARYOME.udb")
 
 # Default parameters
 DEFAULT_BLAST_PARAMS = {
-    "max_target_seqs": 10,
-    "num_threads": 8
+    "max_target_seqs": 20,
+    "num_threads": 4
 }
 
 DEFAULT_VSEARCH_PARAMS = {
@@ -53,8 +53,8 @@ DEFAULT_VSEARCH_PARAMS = {
     "query_cov": 50,
     "maxaccepts": 100,
     "maxrejects": 100,
-    "maxhits": 100,
-    "threads": 8
+    "maxhits": 20,
+    "threads": 4
 }
 
 
