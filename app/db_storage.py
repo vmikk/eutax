@@ -89,3 +89,34 @@ async def save_job_summary(
         ))
         await db.commit()
 
+async def get_job_summaries(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+    """Get a list of job summaries"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        cursor = await db.execute('''
+        SELECT * FROM job_summaries
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        ''', (limit, offset))
+        
+        rows = await cursor.fetchall()
+        
+        result = []
+        for row in rows:
+            job_data = dict(row)
+            
+            # Parse JSON fields
+            if job_data.get('parameters'):
+                job_data['parameters'] = json.loads(job_data['parameters'])
+            
+            if job_data.get('seq_lengths'):
+                job_data['seq_lengths'] = json.loads(job_data['seq_lengths'])
+            
+            if job_data.get('result_files'):
+                job_data['result_files'] = json.loads(job_data['result_files'])
+            
+            result.append(job_data)
+        
+        return result
+
