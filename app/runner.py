@@ -224,6 +224,25 @@ async def run_annotation(job_id: str):
             logger.error(f"Error running job {job_id}: {str(e)}")
 
 
+async def count_sequence_lengths(fasta_path: str) -> List[int]:
+    """
+    Count sequences and return an array of sequence lengths.
+    Returns a list of integers representing the length of each sequence.
+    """
+    def _count_sequence_lengths(path):
+        lengths = []
+        for record in SeqIO.parse(path, "fasta"):
+            lengths.append(len(record.seq))
+        return lengths
+    
+    # Run in thread pool to avoid blocking
+    return await asyncio.get_event_loop().run_in_executor(
+        thread_pool,
+        _count_sequence_lengths,
+        fasta_path
+    )
+
+
 def calculate_cpu_allocation(tool: str, parameters: Dict) -> int:
     """
     Calculate the number of CPU threads to allocate for a specific job
