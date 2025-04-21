@@ -127,3 +127,27 @@ async def get_job_count() -> int:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
+async def get_job_by_id(job_id: str) -> Optional[Dict[str, Any]]:
+    """Get a specific job by ID"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        cursor = await db.execute("SELECT * FROM job_summaries WHERE job_id = ?", (job_id,))
+        row = await cursor.fetchone()
+        
+        if not row:
+            return None
+        
+        job_data = dict(row)
+        
+        # Parse JSON fields
+        if job_data.get('parameters'):
+            job_data['parameters'] = json.loads(job_data['parameters'])
+        
+        if job_data.get('seq_lengths'):
+            job_data['seq_lengths'] = json.loads(job_data['seq_lengths'])
+        
+        if job_data.get('result_files'):
+            job_data['result_files'] = json.loads(job_data['result_files'])
+        
+        return job_data
