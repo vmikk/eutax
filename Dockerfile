@@ -37,6 +37,8 @@ RUN mkdir -p uploads outputs
 ENV UPLOAD_DIR=/app/uploads
 ENV OUTPUT_DIR=/app/outputs
 ENV PYTHONUNBUFFERED=1
+ENV MAX_CPUS=8
+ENV MAX_CONCURRENT_JOBS=2
 
 # Expose port
 EXPOSE 8000
