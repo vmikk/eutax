@@ -206,6 +206,21 @@ async def run_annotation(job_id: str):
         
         except Exception as e:
             database.update_job_status(job_id, JobStatusEnum.FAILED)
+            
+            # Update job summary in SQLite with error status
+            await db_storage.save_job_summary(
+                job_id=job_id,
+                file_id=file_id,
+                tool=tool,
+                algorithm=algorithm,
+                database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
+                parameters=parameters,
+                status=JobStatusEnum.FAILED,
+                created_at=job_data["created_at"],
+                started_at=job_data["started_at"],
+                completed_at=job_data["completed_at"]
+            )
+            
             logger.error(f"Error running job {job_id}: {str(e)}")
 
 
