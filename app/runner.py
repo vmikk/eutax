@@ -16,8 +16,12 @@ from app.models.models import JobStatusEnum
 from app import database
 from app.result_parsers import parse_blast_file_to_json
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging with timestamp format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
 
 # Determine total available CPUs and create resource management
