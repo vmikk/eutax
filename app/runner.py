@@ -9,6 +9,9 @@ import tempfile
 from typing import Dict
 import uuid
 import logging
+import asyncio
+import concurrent.futures
+import multiprocessing
 from app.models.models import JobStatusEnum
 from app import database
 from app.result_parsers import parse_blast_file_to_json
@@ -16,6 +19,20 @@ from app.result_parsers import parse_blast_file_to_json
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Determine total available CPUs and create resource management
+TOTAL_CPUS = int(os.environ.get("MAX_CPUS", multiprocessing.cpu_count()))
+logger.info(f"System has {TOTAL_CPUS} available CPUs")
+
+# Maximum concurrent jobs (can be overridden with environment variable)
+MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", 2))
+
+# Create a semaphore to limit concurrent jobs
+# This ensures we don't exceed available system resources
+job_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
+
+# Thread pool executor for running blocking operations
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS)
 
 # Default output directory
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "outputs"))
@@ -44,83 +61,150 @@ DEFAULT_VSEARCH_PARAMS = {
 async def run_annotation(job_id: str):
     """
     Run the annotation and parse the results.
+    Uses a semaphore to limit concurrent resource usage.
     """
-    job_data = database.get_job(job_id)
-    if not job_data:
-        logger.error(f"Job {job_id} not found")
-        return
+    # Acquire semaphore to limit concurrent jobs
+    async with job_semaphore:
+        job_data = database.get_job(job_id)
+        if not job_data:
+            logger.error(f"Job {job_id} not found")
+            return
 
-    # Update job status to running
-    database.update_job_status(job_id, JobStatusEnum.RUNNING)
-    
-    # Get parameters
-    file_id = job_data["file_id"]
-    tool = job_data["tool"]
-    algorithm = job_data["algorithm"]
-    db_path = job_data["database"]
-    parameters = job_data["parameters"]
-    
-    # Get input file path
-    input_file = database.get_upload(file_id)
-    if not input_file or not os.path.exists(input_file):
-        database.update_job_status(job_id, JobStatusEnum.FAILED)
-        logger.error(f"Input file {input_file} for job {job_id} not found")
-        return
+        # Update job status to running
+        database.update_job_status(job_id, JobStatusEnum.RUNNING)
+        
+        # Get parameters
+        file_id = job_data["file_id"]
+        tool = job_data["tool"]
+        algorithm = job_data["algorithm"]
+        db_path = job_data["database"]
+        parameters = job_data["parameters"]
+        
+        # Calculate CPU allocation for this job based on total available
+        # This ensures we don't oversubscribe CPUs across concurrent jobs
+        allocated_cpus = calculate_cpu_allocation(tool, parameters)
+        logger.info(f"Job {job_id} allocated {allocated_cpus} CPUs")
+        
+        # Get input file path
+        input_file = database.get_upload(file_id)
+        if not input_file or not os.path.exists(input_file):
+            database.update_job_status(job_id, JobStatusEnum.FAILED)
+            logger.error(f"Input file {input_file} for job {job_id} not found")
+            return
 
-    # Create job output directory
-    job_output_dir = os.path.join(OUTPUT_DIR, job_id)
-    os.makedirs(job_output_dir, exist_ok=True)
+        # Create job output directory
+        job_output_dir = os.path.join(OUTPUT_DIR, job_id)
+        os.makedirs(job_output_dir, exist_ok=True)
+        
+        try:
+            # Run taxonomic annotation in thread pool
+            if tool.lower() == "blast":
+                # Run BLAST in a non-blocking way using thread pool
+                output_path = await run_blast_async(
+                    input_file, 
+                    job_output_dir, 
+                    algorithm, 
+                    db_path or DEFAULT_BLAST_DB, 
+                    parameters
+                )
+                
+                # Parse the BLAST results and save as JSON (also in thread pool)
+                json_output_path = os.path.join(job_output_dir, "results.json")
+                await asyncio.get_event_loop().run_in_executor(
+                    thread_pool,
+                    parse_blast_file_to_json,
+                    output_path, 
+                    json_output_path
+                )
+                logger.info(f"Parsed BLAST results saved to {json_output_path}")
+                
+                # Add the JSON output path to the job data
+                result_files = {
+                    "raw": output_path,
+                    "json": json_output_path
+                }
+                
+            elif tool.lower() == "vsearch":
+                # Run VSEARCH in a non-blocking way using thread pool
+                output_path = await run_vsearch_async(
+                    input_file, 
+                    job_output_dir, 
+                    db_path or DEFAULT_UDB_DB, 
+                    parameters
+                )
+                
+                # For now, just store the raw output path for VSEARCH
+                # TODO: Implement VSEARCH result parsing
+                result_files = {
+                    "raw": output_path
+                }
+                
+            else:
+                raise ValueError(f"Unsupported tool: {tool}")
+            
+            # Update job status to finished
+            database.update_job_status(job_id, JobStatusEnum.FINISHED)
+            
+            # Save output paths
+            database.update_job_results(job_id, result_files)
+            
+            logger.info(f"Job {job_id} completed successfully")
+        
+        except Exception as e:
+            database.update_job_status(job_id, JobStatusEnum.FAILED)
+            logger.error(f"Error running job {job_id}: {str(e)}")
+
+
+def calculate_cpu_allocation(tool: str, parameters: Dict) -> int:
+    """
+    Calculate the number of CPU threads to allocate for a specific job
+    based on the available system resources and concurrent job limit.
     
-    try:
-        # Run taxonomic annotation
-        if tool.lower() == "blast":
-            output_path = run_blast(
-                input_file, 
-                job_output_dir, 
-                algorithm, 
-                db_path or DEFAULT_BLAST_DB, 
-                parameters
-            )
-            
-            # Parse the BLAST results and save as JSON
-            json_output_path = os.path.join(job_output_dir, "results.json")
-            parse_blast_file_to_json(output_path, json_output_path)
-            logger.info(f"Parsed BLAST results saved to {json_output_path}")
-            
-            # Add the JSON output path to the job data
-            result_files = {
-                "raw": output_path,
-                "json": json_output_path
-            }
-            
-        elif tool.lower() == "vsearch":
-            output_path = run_vsearch(
-                input_file, 
-                job_output_dir, 
-                db_path or DEFAULT_UDB_DB, 
-                parameters
-            )
-            
-            # For now, just store the raw output path for VSEARCH
-            # TODO: Implement VSEARCH result parsing
-            result_files = {
-                "raw": output_path
-            }
-            
-        else:
-            raise ValueError(f"Unsupported tool: {tool}")
-        
-        # Update job status to finished
-        database.update_job_status(job_id, JobStatusEnum.FINISHED)
-        
-        # Save output paths
-        database.update_job_results(job_id, result_files)
-        
-        logger.info(f"Job {job_id} completed successfully")
+    Returns the number of CPUs to use for this job.
+    """
+    # Get requested number of threads from parameters
+    if tool.lower() == "blast":
+        requested_threads = parameters.get("num_threads", DEFAULT_BLAST_PARAMS["num_threads"])
+    elif tool.lower() == "vsearch":
+        requested_threads = parameters.get("threads", DEFAULT_VSEARCH_PARAMS["threads"])
+    else:
+        requested_threads = 1  # Default for unknown tools
     
-    except Exception as e:
-        database.update_job_status(job_id, JobStatusEnum.FAILED)
-        logger.error(f"Error running job {job_id}: {str(e)}")
+    # Calculate a fair share based on available CPUs and max concurrent jobs
+    fair_share = max(1, TOTAL_CPUS // MAX_CONCURRENT_JOBS)
+    
+    # Use the smaller of the requested amount and fair share
+    return min(requested_threads, fair_share)
+
+
+async def run_blast_async(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> str:
+    """
+    Asynchronous wrapper around run_blast to execute it in a thread pool.
+    """
+    # Adjust num_threads parameter based on available resources
+    adjusted_parameters = parameters.copy()
+    adjusted_parameters["num_threads"] = calculate_cpu_allocation("blast", parameters)
+    
+    return await asyncio.get_event_loop().run_in_executor(
+        thread_pool,
+        run_blast,
+        input_file, output_dir, algorithm, db_path, adjusted_parameters
+    )
+
+
+async def run_vsearch_async(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> str:
+    """
+    Asynchronous wrapper around run_vsearch to execute it in a thread pool.
+    """
+    # Adjust threads parameter based on available resources
+    adjusted_parameters = parameters.copy()
+    adjusted_parameters["threads"] = calculate_cpu_allocation("vsearch", parameters)
+    
+    return await asyncio.get_event_loop().run_in_executor(
+        thread_pool,
+        run_vsearch,
+        input_file, output_dir, db_path, adjusted_parameters
+    )
 
 
 def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> str:
