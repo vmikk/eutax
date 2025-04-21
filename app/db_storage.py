@@ -120,3 +120,10 @@ async def get_job_summaries(limit: int = 100, offset: int = 0) -> List[Dict[str,
         
         return result
 
+async def get_job_count() -> int:
+    """Get the total number of jobs executed"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM job_summaries")
+        row = await cursor.fetchone()
+        return row[0] if row else 0
+
