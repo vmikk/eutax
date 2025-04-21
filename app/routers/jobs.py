@@ -7,7 +7,7 @@ import uuid
 import os
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, FileResponse
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from app.models.models import (
     JobRequest, 
@@ -18,6 +18,7 @@ from app.models.models import (
     PaginationInfo
 )
 from app import database
+from app import db_storage
 from app.runner import run_annotation
 
 router = APIRouter()
@@ -161,3 +162,18 @@ async def list_jobs(
             total=total
         )
     )
+
+
+@router.get("/jobs/summaries", response_model=List[Dict[str, Any]])
+async def get_job_summaries(
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of job summaries to return"),
+    offset: int = Query(0, ge=0, description="Starting position for pagination")
+):
+    """
+    Get detailed summaries of all jobs from the persistent SQLite database.
+    Includes sequence counts, lengths, CPU metrics, and other job information.
+    """
+    summaries = await db_storage.get_job_summaries(limit, offset)
+    return summaries
+
+
