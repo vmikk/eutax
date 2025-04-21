@@ -61,6 +61,7 @@ class JobSummary(BaseModel):
     job_id: str
     status: JobStatusEnum
     started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class PaginationInfo(BaseModel):

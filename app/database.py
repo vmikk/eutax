@@ -111,7 +111,8 @@ def list_jobs(status: Optional[str] = None, limit: int = 10, offset: int = 0) ->
             job_list.append({
                 "job_id": job_id,
                 "status": job_data["status"],
-                "started_at": job_data["started_at"]
+                "started_at": job_data["started_at"],
+                "completed_at": job_data["completed_at"]
             })
     
     total = len(job_list)
