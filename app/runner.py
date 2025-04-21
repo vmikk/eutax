@@ -6,14 +6,17 @@ manages job output, and provides background task processing functionality.
 import os
 import subprocess
 import tempfile
-from typing import Dict
+from typing import Dict, List
 import uuid
 import logging
 import asyncio
 import concurrent.futures
 import multiprocessing
+import time
+from Bio import SeqIO
 from app.models.models import JobStatusEnum
 from app import database
+from app import db_storage
 from app.result_parsers import parse_blast_file_to_json
 
 # Configure logging with timestamp format
@@ -101,6 +104,30 @@ async def run_annotation(job_id: str):
         os.makedirs(job_output_dir, exist_ok=True)
         
         try:
+            # Record CPU time
+            start_time = time.time()
+            
+            # Count sequences and get lengths
+            seq_lengths = await count_sequence_lengths(input_file)
+            sequence_count = len(seq_lengths)
+            logger.info(f"Job {job_id} has {sequence_count} sequences")
+            
+            # Save initial job summary with sequence info to SQLite db
+            await db_storage.save_job_summary(
+                job_id=job_id,
+                file_id=file_id,
+                tool=tool,
+                algorithm=algorithm,
+                database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
+                parameters=parameters,
+                status=JobStatusEnum.RUNNING,
+                created_at=job_data["created_at"],
+                started_at=job_data["started_at"],
+                seq_count=sequence_count,
+                seq_lengths=seq_lengths,
+                cpu_count=allocated_cpus
+            )
+            
             # Run taxonomic annotation in thread pool
             if tool.lower() == "blast":
                 # Run BLAST in a non-blocking way using thread pool
@@ -146,13 +173,36 @@ async def run_annotation(job_id: str):
             else:
                 raise ValueError(f"Unsupported tool: {tool}")
             
+            # Calculate elapsed CPU time
+            end_time = time.time()
+            cpu_time_seconds = (end_time - start_time) * allocated_cpus  # Scale by CPU count
+            
             # Update job status to finished
             database.update_job_status(job_id, JobStatusEnum.FINISHED)
             
             # Save output paths
             database.update_job_results(job_id, result_files)
             
-            logger.info(f"Job {job_id} completed successfully")
+            # Update job summary in SQLite db with final information
+            await db_storage.save_job_summary(
+                job_id=job_id,
+                file_id=file_id,
+                tool=tool,
+                algorithm=algorithm,
+                database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
+                parameters=parameters,
+                status=JobStatusEnum.FINISHED,
+                created_at=job_data["created_at"],
+                started_at=job_data["started_at"],
+                completed_at=job_data["completed_at"],
+                seq_count=sequence_count,
+                seq_lengths=seq_lengths,
+                cpu_count=allocated_cpus,
+                cpu_time_seconds=round(cpu_time_seconds, 2),
+                result_files=result_files
+            )
+            
+            logger.info(f"Job {job_id} completed successfully in {cpu_time_seconds:.2f} CPU seconds")
         
         except Exception as e:
             database.update_job_status(job_id, JobStatusEnum.FAILED)
