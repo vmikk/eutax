@@ -47,3 +47,45 @@ def ensure_db_initialized():
 # Initialize DB on module import
 ensure_db_initialized()
 
+async def save_job_summary(
+    job_id: str,
+    file_id: str,
+    tool: str,
+    algorithm: str,
+    database_path: str,
+    parameters: Dict,
+    status: str,
+    created_at: datetime,
+    started_at: Optional[datetime] = None,
+    completed_at: Optional[datetime] = None,
+    seq_count: Optional[int] = None,
+    seq_lengths: Optional[List[int]] = None,
+    cpu_count: Optional[int] = None,
+    cpu_time_seconds: Optional[float] = None,
+    result_files: Optional[Dict[str, str]] = None
+) -> None:
+    """Save or update job summary information"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Convert parameters, seq_lengths and result_files to JSON
+        parameters_json = json.dumps(parameters)
+        seq_lengths_json = json.dumps(seq_lengths) if seq_lengths else None
+        result_files_json = json.dumps(result_files) if result_files else None
+        
+        # Convert datetime objects to ISO format strings
+        created_at_str = created_at.isoformat()
+        started_at_str = started_at.isoformat() if started_at else None
+        completed_at_str = completed_at.isoformat() if completed_at else None
+        
+        await db.execute('''
+        INSERT OR REPLACE INTO job_summaries (
+            job_id, file_id, tool, algorithm, database_path, parameters, 
+            status, created_at, started_at, completed_at, 
+            seq_count, seq_lengths, cpu_count, cpu_time_seconds, result_files
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            job_id, file_id, tool, algorithm, database_path, parameters_json,
+            status, created_at_str, started_at_str, completed_at_str,
+            seq_count, seq_lengths_json, cpu_count, cpu_time_seconds, result_files_json
+        ))
+        await db.commit()
+
