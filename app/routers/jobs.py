@@ -186,3 +186,20 @@ async def get_job_count():
     return {"count": count}
 
 
+@router.get("/jobs/{job_id}/summary", response_model=Dict[str, Any])
+async def get_job_summary(job_id: str):
+    """
+    Get a detailed summary for a specific job from the persistent SQLite database.
+    Includes sequence information, CPU metrics, and other job details.
+    """
+    summary = await db_storage.get_job_by_id(job_id)
+    
+    if not summary:
+        raise HTTPException(status_code=404, detail={
+            "error": {
+                "code": 404,
+                "message": f"Job ID '{job_id}' not found in the persistent database."
+            }
+        })
+    
+    return summary
