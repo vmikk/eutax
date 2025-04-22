@@ -225,7 +225,7 @@ def parse_blast_file_to_json(file_path: str, output_path: Optional[str] = None) 
 # tlo      First nucleotide of the target aligned with the query
 # thi      Last nucleotide of the target aligned with the query
 # evalue   E-value (not computed for nucleotide alignments). Always set to -1.
-# bits     Bit score (not computed for nucleotide alignments). Always set to 0.
+# bits     Bit score (not computed for nucleotide alignments). Always set to 0. --> use `raw` with raw alignment scores
 # qcov     Query coverage
 # qstrand  Query strand orientation
 # ql       Query sequence length
