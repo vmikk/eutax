@@ -375,10 +375,9 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
                 "qend": int(row["qend"]),
                 "sstart": int(row["sstart"]),
                 "send": int(row["send"]),
-                # NB! evalue is not computed for nucleotide alignments in VSEARCH
-                "evalue": None,
-                # NB! bit score is not computed for nucleotide alignments in VSEARCH
-                "bitscore": None,
+                "evalue": None,       # NB! evalue is not computed for nucleotide alignments in VSEARCH
+                # "bitscore": None,   # NB! bit score is not computed for nucleotide alignments in VSEARCH
+                "bitscore": int(row["bitscore"]) if not pd.isna(row["bitscore"]) else None,   # use raw alignment scores
                 "qcovs": float(row["qcovs"]) if not pd.isna(row["qcovs"]) else None,
                 "sstrand": row["sstrand"] if "sstrand" in row else None,
                 "slen": int(row["slen"]) if not pd.isna(row["slen"]) else None
