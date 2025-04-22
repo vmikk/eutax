@@ -280,7 +280,7 @@ async def run_blast_async(input_file: str, output_dir: str, algorithm: str, db_p
     )
 
 
-async def run_vsearch_async(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> str:
+async def run_vsearch_async(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
     """
     Asynchronous wrapper around run_vsearch to execute it in a thread pool.
     """
