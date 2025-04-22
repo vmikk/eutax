@@ -157,17 +157,29 @@ async def run_annotation(job_id: str):
                 
             elif tool.lower() == "vsearch":
                 # Run VSEARCH in a non-blocking way using thread pool
-                output_path = await run_vsearch_async(
+                output_path, alignment_output = await run_vsearch_async(
                     input_file, 
                     job_output_dir, 
                     db_path or DEFAULT_UDB_DB, 
                     parameters
                 )
                 
-                # For now, just store the raw output path for VSEARCH
-                # TODO: Implement VSEARCH result parsing
+                # Parse the VSEARCH results and save as JSON (using thread pool)
+                json_output_path = os.path.join(job_output_dir, "results.json")
+                await asyncio.get_event_loop().run_in_executor(
+                    thread_pool,
+                    parse_vsearch_file_to_json,
+                    output_path, 
+                    alignment_output,
+                    json_output_path
+                )
+                logger.info(f"Parsed VSEARCH results saved to {json_output_path}")
+                
+                # Add the JSON output path to the job data
                 result_files = {
-                    "raw": output_path
+                    "raw": output_path,
+                    "alignment": alignment_output,
+                    "json": json_output_path
                 }
                 
             else:
