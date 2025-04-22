@@ -411,3 +411,23 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
     return result
 
 
+def parse_vsearch_file_to_json(userout_file: str, alnout_file: str, output_path: Optional[str] = None) -> str:
+    """
+    Parse VSEARCH output files and save the results as JSON.
+    
+    Args:
+        userout_file: Path to the VSEARCH tabular output file (--userout + --userfields)
+        alnout_file: Path to the VSEARCH alignment output file (--alnout)
+        output_path: Optional path to save the JSON output (if None, JSON is returned as string)
+        
+    Returns:
+        JSON string or file path where JSON was saved
+    """
+    results = parse_vsearch_results(userout_file, alnout_file)
+    
+    if output_path:
+        with open(output_path, 'w') as f:
+            json.dump(results, f, indent=2)
+        return output_path
+    else:
+        return json.dumps(results, indent=2)
