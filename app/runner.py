@@ -6,7 +6,7 @@ manages job output, and provides background task processing functionality.
 import os
 import subprocess
 import tempfile
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 import uuid
 import logging
 import asyncio
@@ -17,7 +17,7 @@ from Bio import SeqIO
 from app.models.models import JobStatusEnum
 from app import database
 from app import db_storage
-from app.result_parsers import parse_blast_file_to_json
+from app.result_parsers import parse_blast_file_to_json, parse_vsearch_file_to_json
 
 # Configure logging with timestamp format
 logging.basicConfig(
