@@ -363,6 +363,13 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
             if qseq and sseq:
                 alignment = format_alignment(qseq, sseq)
 
+            # Recode strand naming to match BLAST
+            sstrand = row["sstrand"] if "sstrand" in row else None
+            if sstrand == "+":
+                sstrand = "plus"
+            elif sstrand == "-":
+                sstrand = "minus"
+
             # Create a hit entry
             hit = {
                 "sseqid": row["sseqid"],
@@ -379,7 +386,7 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
                 # "bitscore": None,   # NB! bit score is not computed for nucleotide alignments in VSEARCH
                 "bitscore": int(row["bitscore"]) if not pd.isna(row["bitscore"]) else None,   # use raw alignment scores
                 "qcovs": float(row["qcovs"]) if not pd.isna(row["qcovs"]) else None,
-                "sstrand": row["sstrand"] if "sstrand" in row else None,
+                "sstrand": sstrand,
                 "slen": int(row["slen"]) if not pd.isna(row["slen"]) else None
             }
                 
