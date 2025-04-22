@@ -9,28 +9,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 
-########################################### BLAST results
-
-## Customized format for BLAST results (with extra columns 13+)
-#   1. qseqid      query or source (gene) sequence id
-#   2. sseqid      subject or target (reference genome) sequence id
-#   3. pident      percentage of identical positions
-#   4. length      alignment length (sequence overlap)
-#   5. mismatch    number of mismatches
-#   6. gapopen     number of gap openings
-#   7. qstart      start of alignment in query
-#   8. qend        end of alignment in query
-#   9. sstart      start of alignment in subject
-#  10. send        end of alignment in subject
-#  11. evalue      expect value
-#  12. bitscore    bit score
-#  13. qcovs       Query Coverage Per Subject
-#  14. sstrand     Subject Strand
-#  15. qlen        Query sequence length
-#  16. slen        Subject sequence length
-#  17. qseq        Aligned part of query sequence
-#  18. sseq        Aligned part of subject sequence
-
+########################################### Common functions
 
 def parse_sseqid(sseqid: str) -> Dict[str, str]:
     """
@@ -99,6 +78,30 @@ def format_alignment(qseq: str, sseq: str) -> Dict[str, Any]:
         "midline": midline,
         "sseq": sseq
     }
+
+
+########################################### BLAST results
+
+## Customized format for BLAST results (with extra columns 13+)
+#   1. qseqid      query or source (gene) sequence id
+#   2. sseqid      subject or target (reference genome) sequence id
+#   3. pident      percentage of identical positions
+#   4. length      alignment length (sequence overlap)
+#   5. mismatch    number of mismatches
+#   6. gapopen     number of gap openings
+#   7. qstart      start of alignment in query
+#   8. qend        end of alignment in query
+#   9. sstart      start of alignment in subject
+#  10. send        end of alignment in subject
+#  11. evalue      expect value
+#  12. bitscore    bit score
+#  13. qcovs       Query Coverage Per Subject
+#  14. sstrand     Subject Strand
+#  15. qlen        Query sequence length
+#  16. slen        Subject sequence length
+#  17. qseq        Aligned part of query sequence
+#  18. sseq        Aligned part of subject sequence
+
 
 
 def parse_blast_results(file_path: str) -> Dict[str, Any]:
