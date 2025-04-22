@@ -298,3 +298,116 @@ def parse_vsearch_alignments(file_path: str) -> Dict[str, Dict[str, Dict[str, st
     return alignments
 
 
+def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]:
+    """
+    Parse VSEARCH tabular output and alignment file, combining them into a structured format
+    similar to BLAST results.
+    
+    Args:
+        userout_file: Path to the VSEARCH tabular output file (--userout + --userfields)
+        alnout_file: Path to the VSEARCH alignment output file (--alnout)
+        
+    Returns:
+        Dictionary with parsed results grouped by query ID
+    """
+    # Define column names for VSEARCH userout + custom userfields output
+    # Columns are renamed to match BLAST output format
+    columns = [
+        "qseqid", "sseqid", "pident", "length", "mismatch", "gapopen",
+        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+        "qcovs", "sstrand", "qlen", "slen"
+    ]
+    
+    # Read aligned sequences from alignment output
+    sequence_data = parse_vsearch_alignments(alnout_file)
+    
+    # Read the tab-delimited file
+    try:
+        df = pd.read_csv(userout_file, sep='\t', names=columns, header=None)
+    except Exception as e:
+        return {"error": f"Failed to parse VSEARCH results: {str(e)}"}
+    
+    if df.empty:
+        return {"results": [], "summary": {"total_queries": 0, "total_hits": 0}}
+    
+    # Group by query ID
+    result = {"results": [], "summary": {}}
+    query_groups = df.groupby("qseqid")
+    
+    for query_id, group in query_groups:
+        # Convert the group to records for easier processing
+        hits = []
+        
+        for _, row in group.iterrows():
+            target_id = row["sseqid"]
+            
+            # Try to get aligned sequences from alignment file
+            qseq = sseq = None
+            if query_id in sequence_data and target_id in sequence_data[query_id]:
+                qseq = sequence_data[query_id][target_id]["qseq"]
+                sseq = sequence_data[query_id][target_id]["sseq"]
+            
+            # Parse taxonomy from sseqid if possible
+            taxonomy = {}
+            if ';' in target_id:
+                try:
+                    taxonomy = parse_sseqid(target_id)
+                except:
+                    # If parse_sseqid is not available, create a minimal taxonomy dict
+                    taxonomy = {"accession": target_id, "species": target_id}
+            else:
+                taxonomy = {"accession": target_id, "species": target_id}
+            
+            # Format the alignment if sequences are available
+            alignment = None
+            if qseq and sseq:
+                alignment = format_alignment(qseq, sseq)
+
+            # Create a hit entry
+            hit = {
+                "sseqid": row["sseqid"],
+                "taxonomy": taxonomy,
+                "pident": float(row["pident"]),
+                "length": int(row["length"]),
+                "mismatch": int(row["mismatch"]),
+                "gapopen": int(row["gapopen"]),
+                "qstart": int(row["qstart"]),
+                "qend": int(row["qend"]),
+                "sstart": int(row["sstart"]),
+                "send": int(row["send"]),
+                # NB! evalue is not computed for nucleotide alignments in VSEARCH
+                "evalue": None,
+                # NB! bit score is not computed for nucleotide alignments in VSEARCH
+                "bitscore": None,
+                "qcovs": float(row["qcovs"]) if not pd.isna(row["qcovs"]) else None,
+                "sstrand": row["sstrand"] if "sstrand" in row else None,
+                "slen": int(row["slen"]) if not pd.isna(row["slen"]) else None
+            }
+                
+            if alignment:
+                hit["alignment"] = alignment
+                
+            hits.append(hit)
+        
+        # Sort hits by percent identity (descending) since bitscore is not available in VSEARCH
+        hits.sort(key=lambda x: (-x["pident"], x["length"]))
+        
+        # Add to results
+        query_result = {
+            "query_id": query_id,
+            "query_length": int(group["qlen"].iloc[0]) if not pd.isna(group["qlen"].iloc[0]) else None,
+            "hit_count": len(hits),
+            "hits": hits
+        }
+        
+        result["results"].append(query_result)
+    
+    # Add summary information
+    result["summary"] = {
+        "total_queries": len(query_groups),
+        "total_hits": len(df)
+    }
+    
+    return result
+
+
