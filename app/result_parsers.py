@@ -168,7 +168,7 @@ def parse_blast_results(file_path: str) -> Dict[str, Any]:
             hits.append(hit)
         
         # Sort hits (mainly by bitscore & evalue)
-        hits.sort(key=lambda x: (-x["bitscore"], x["evalue"], -x["pident"], x["length"], -x["qcovs"], x["sseqid"]))
+        hits.sort(key=lambda x: (-x["bitscore"], x["evalue"], -x["pident"], -x["length"], -x["qcovs"], x["sseqid"]))
         
         # Add to results
         query_result = {
@@ -389,7 +389,7 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
             hits.append(hit)
         
         # Sort hits by percent identity, length, and query coverage (since bitscore is not available in VSEARCH)
-        hits.sort(key=lambda x: (-x["pident"], x["length"], -x["qcovs"], x["sseqid"]))
+        hits.sort(key=lambda x: (-x["pident"], -x["length"], -x["qcovs"], x["sseqid"]))
         
         # Add to results
         query_result = {
