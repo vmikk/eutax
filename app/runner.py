@@ -382,7 +382,8 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     results_file = os.path.join(output_dir, "res_vsearch.txt")
     alignment_output = os.path.join(output_dir, "res_alignment.txt")
     
-    outfmt = "query+target+id+alnlen+mism+opens+qlo+qhi+tlo+thi+evalue+bits+qcov+qstrand+ql+tl"
+    outfmt = "query+target+id+alnlen+mism+opens+qlo+qhi+tlo+thi+evalue+raw+qcov+qstrand+ql+tl"
+    # outfmt = "query+target+id+alnlen+mism+opens+qlo+qhi+tlo+thi+evalue+bits+qcov+qstrand+ql+tl"
 
     # query    Query label
     # target   Target label
@@ -395,7 +396,7 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     # tlo      First nucleotide of the target aligned with the query
     # thi      Last nucleotide of the target aligned with the query
     # evalue   E-value (not computed for nucleotide alignments). Always set to -1.
-    # bits     Bit score (not computed for nucleotide alignments). Always set to 0.
+    # bits     Bit score (not computed for nucleotide alignments). Always set to 0. --> use `raw` with raw alignment scores
     # qcov     Query coverage
     # qstrand  Query strand orientation
     # ql       Query sequence length
