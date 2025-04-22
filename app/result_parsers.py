@@ -209,3 +209,92 @@ def parse_blast_file_to_json(file_path: str, output_path: Optional[str] = None) 
     else:
         return json.dumps(results, indent=2)
 
+
+
+########################################### VSEARCH results
+
+## Customized format for VSEARCH results
+# query    Query label
+# target   Target label
+# id       The percentage of identity
+# alnlen   The length of the query-target alignment
+# mism     Number of mismatches in the alignment
+# opens    Number of columns containing a gap opening
+# qlo      First nucleotide of the query aligned with the target
+# qhi      Last nucleotide of the query aligned with the target
+# tlo      First nucleotide of the target aligned with the query
+# thi      Last nucleotide of the target aligned with the query
+# evalue   E-value (not computed for nucleotide alignments). Always set to -1.
+# bits     Bit score (not computed for nucleotide alignments). Always set to 0.
+# qcov     Query coverage
+# qstrand  Query strand orientation
+# ql       Query sequence length
+# tl       Target sequence length
+
+
+def parse_vsearch_alignments(file_path: str) -> Dict[str, Dict[str, Dict[str, str]]]:
+    """
+    Parse VSEARCH alignment output file and extract aligned sequences.
+    
+    Args:
+        file_path: Path to the VSEARCH alignment output file (results of `--alnout`)
+        
+    Returns:
+        Dictionary with {query_id: {target_id: {"qseq": query_seq, "sseq": subject_seq}}}
+    """
+    alignments = {}
+    
+    with open(file_path, 'r') as f:
+        content = f.read()
+    
+    # Split by query blocks
+    query_blocks = content.split("Query >")
+    if len(query_blocks) > 1:
+        query_blocks = query_blocks[1:]  # Skip header part if exists
+    
+    for block in query_blocks:
+        if not block.strip():
+            continue
+            
+        # Get query ID from first line
+        query_id = block.split('\n')[0].strip()
+        alignments[query_id] = {}
+        
+        # Split into alignments
+        sections = block.split("Query ")
+        alignment_sections = sections[1:]
+        
+        # Process alignment sections
+        for alignment in alignment_sections:
+            lines = alignment.strip().split('\n')
+            if len(lines) < 5:
+                continue
+                
+            # Get target ID
+            target_header = lines[1].strip()
+            target_id = target_header.split('>')[1].strip()
+            
+            # Extract aligned sequences
+            qseq = None
+            sseq = None
+            
+            for i in range(2, len(lines)):
+                if lines[i].startswith('Qry'):
+                    qry_parts = lines[i].split('+')
+                    if len(qry_parts) > 1:
+                        qseq = ''.join([c for c in qry_parts[1].strip() if c.upper() in 'ACGTN-'])
+                elif lines[i].startswith('Tgt'):
+                    tgt_parts = lines[i].split('+')
+                    if len(tgt_parts) > 1:
+                        sseq = ''.join([c for c in tgt_parts[1].strip() if c.upper() in 'ACGTN-'])
+            
+            # Store the aligned sequences
+            if qseq and sseq:
+                alignments[query_id][target_id] = {
+                    "qseq": qseq,
+                    "sseq": sseq
+                }
+    
+    return alignments
+
+
