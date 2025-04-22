@@ -354,7 +354,7 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
     return results_file
 
 
-def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> str:
+def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
     """
     Run VSEARCH command and return output file path.
     """
@@ -367,9 +367,28 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     num_threads = parameters.get("threads", DEFAULT_VSEARCH_PARAMS["threads"])
     
     # Set output files
-    results_file = os.path.join(output_dir, "res_blast.txt")
-    # alignment_output = os.path.join(output_dir, "res_alignment.txt")
+    results_file = os.path.join(output_dir, "res_vsearch.txt")
+    alignment_output = os.path.join(output_dir, "res_alignment.txt")
     
+    outfmt = "query+target+id+alnlen+mism+opens+qlo+qhi+tlo+thi+evalue+bits+qcov+qstrand+ql+tl"
+
+    # query    Query label
+    # target   Target label
+    # id       The percentage of identity
+    # alnlen   The length of the query-target alignment
+    # mism     Number of mismatches in the alignment
+    # opens    Number of columns containing a gap opening
+    # qlo      First nucleotide of the query aligned with the target
+    # qhi      Last nucleotide of the query aligned with the target
+    # tlo      First nucleotide of the target aligned with the query
+    # thi      Last nucleotide of the target aligned with the query
+    # evalue   E-value (not computed for nucleotide alignments). Always set to -1.
+    # bits     Bit score (not computed for nucleotide alignments). Always set to 0.
+    # qcov     Query coverage
+    # qstrand  Query strand orientation
+    # ql       Query sequence length
+    # tl       Target sequence length
+
     # Build command
     cmd = [
         "vsearch",
@@ -377,8 +396,11 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
         "--db", db_path,
         "--id", str(min_identity / 100),        # Convert from percentage to decimal
         "--query_cov", str(min_coverage / 100), # Convert from percentage to decimal
-        "--blast6out", results_file,
-        # "--alnout", alignment_output,
+        # "--blast6out", results_file,
+        "--userout",  results_file,
+        "--userfields", outfmt,
+        "--alnout", alignment_output,
+        "--rowlen", str(99999),
         "--strand", "both",
         "--maxaccepts", str(maxaccepts),
         "--maxrejects", str(maxrejects),
@@ -395,4 +417,4 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     if process.returncode != 0:
         raise Exception(f"VSEARCH command failed: {process.stderr}")
     
-    return results_file
+    return results_file, alignment_output
