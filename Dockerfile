@@ -14,7 +14,7 @@ RUN apt-get update \
   && rm -f "vsearch.tar.gz" \
   && mv vsearch-2.30.0-linux-x86_64/bin/vsearch /usr/bin/ \
   && rm -rf vsearch-2.30.0-linux-x86_64 \
-  && curl https://sh.rustup.rs -sSf | sh -s -- -y \
+  && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal \
   && echo 'source $HOME/.cargo/env' >> $HOME/.bashrc \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
