@@ -35,11 +35,11 @@ COPY run.py /app/
 RUN mkdir -p uploads outputs
 
 # Set environment variables
-ENV UPLOAD_DIR=/app/uploads
-ENV OUTPUT_DIR=/app/outputs
-ENV PYTHONUNBUFFERED=1
-ENV MAX_CPUS=8
-ENV MAX_CONCURRENT_JOBS=2
+ENV UPLOAD_DIR=/app/uploads \
+    OUTPUT_DIR=/app/outputs \
+    PYTHONUNBUFFERED=1 \
+    MAX_CPUS=8 \
+    MAX_CONCURRENT_JOBS=2
 
 # Expose port
 EXPOSE 8000
