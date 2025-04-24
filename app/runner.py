@@ -103,10 +103,12 @@ async def run_annotation(job_id: str):
         job_output_dir = os.path.join(OUTPUT_DIR, job_id)
         os.makedirs(job_output_dir, exist_ok=True)
         
+        # Initialize variables
+        start_time = time.time()
+        result_files = None
+        status = JobStatusEnum.FINISHED
+        
         try:
-            # Record CPU time
-            start_time = time.time()
-            
             # Count sequences and get lengths
             seq_lengths = await count_sequence_lengths(input_file)
             sequence_count = len(seq_lengths)
@@ -185,15 +187,21 @@ async def run_annotation(job_id: str):
             else:
                 raise ValueError(f"Unsupported tool: {tool}")
             
+        except Exception as e:
+            status = JobStatusEnum.FAILED
+            logger.error(f"Error running job {job_id}: {str(e)}")
+        
+        finally:
             # Calculate elapsed CPU time
             end_time = time.time()
             cpu_time_seconds = (end_time - start_time) * allocated_cpus  # Scale by CPU count
             
-            # Update job status to finished
-            database.update_job_status(job_id, JobStatusEnum.FINISHED)
+            # Update job status
+            database.update_job_status(job_id, status)
             
-            # Save output paths
-            database.update_job_results(job_id, result_files)
+            # Save output paths if available
+            if result_files:
+                database.update_job_results(job_id, result_files)
             
             # Update job summary in SQLite db with final information
             await db_storage.save_job_summary(
@@ -203,7 +211,7 @@ async def run_annotation(job_id: str):
                 algorithm=algorithm,
                 database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
                 parameters=parameters,
-                status=JobStatusEnum.FINISHED,
+                status=status,
                 created_at=job_data["created_at"],
                 started_at=job_data["started_at"],
                 completed_at=job_data["completed_at"],
@@ -214,34 +222,10 @@ async def run_annotation(job_id: str):
                 result_files=result_files
             )
             
-            logger.info(f"Job {job_id} completed successfully in {cpu_time_seconds:.2f} CPU seconds")
-        
-        except Exception as e:
-            # Calculate elapsed CPU time up to the point of failure
-            end_time = time.time()
-            cpu_time_seconds = (end_time - start_time) * allocated_cpus
-            
-            database.update_job_status(job_id, JobStatusEnum.FAILED)
-            
-            # Update job summary in SQLite with error status
-            await db_storage.save_job_summary(
-                job_id=job_id,
-                file_id=file_id,
-                tool=tool,
-                algorithm=algorithm,
-                database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
-                parameters=parameters,
-                status=JobStatusEnum.FAILED,
-                created_at=job_data["created_at"],
-                started_at=job_data["started_at"],
-                completed_at=job_data["completed_at"],
-                seq_count=sequence_count,
-                seq_lengths=seq_lengths,
-                cpu_count=allocated_cpus,
-                cpu_time_seconds=round(cpu_time_seconds, 2)
-            )
-            
-            logger.error(f"Error running job {job_id}: {str(e)}")
+            if status == JobStatusEnum.FINISHED:
+                logger.info(f"Job {job_id} completed successfully in {cpu_time_seconds:.2f} CPU seconds")
+            else:
+                logger.info(f"Job {job_id} failed after {cpu_time_seconds:.2f} CPU seconds")
 
 
 async def count_sequence_lengths(fasta_path: str) -> List[int]:
