@@ -77,7 +77,11 @@ ENV UPLOAD_DIR=/app/uploads \
     MAX_CPUS=8 \
     MAX_CONCURRENT_JOBS=2
 
-# Expose port
+## Healthcheck to verify the API is up
+HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
+    CMD curl --fail http://localhost:8000/api/v1/health || exit 1
+
+## Expose port
 EXPOSE 8000
 
 # Run the application
