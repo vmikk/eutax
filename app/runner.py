@@ -415,6 +415,7 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     # Set output files
     results_file = os.path.join(output_dir, "res_vsearch.txt")
     alignment_output = os.path.join(output_dir, "res_alignment.txt")
+    log_file = os.path.join(output_dir, "job_log.log")
     
     outfmt = "query+target+id+alnlen+mism+opens+qlo+qhi+tlo+thi+evalue+raw+qcov+qstrand+ql+tl"
     # outfmt = "query+target+id+alnlen+mism+opens+qlo+qhi+tlo+thi+evalue+bits+qcov+qstrand+ql+tl"
@@ -458,10 +459,35 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     
     logger.info(f"Running VSEARCH command: {' '.join(cmd)}")
     
-    # Run command
-    process = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    # Write command to log file
+    with open(log_file, "w") as f:
+        f.write(f"Command:\n{' '.join(cmd)}\n\n")
     
+    # Run command and capture all output
+    process = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False
+    )
+    
+    # Append output to log file
+    with open(log_file, "a") as f:
+        if process.stdout:
+            f.write("\nSTDOUT:\n")
+            f.write(process.stdout)
+        if process.stderr:
+            f.write("\nSTDERR:\n")
+            f.write(process.stderr)
+        f.write(f"\nExit code:\n{process.returncode}\n")
+    
+    # Raise exception if command failed
     if process.returncode != 0:
-        raise Exception(f"VSEARCH command failed: {process.stderr}")
+        error_msg = f"Command failed with exit code {process.returncode}"
+        if process.stderr:
+            error_msg += f": {process.stderr}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
     
     return results_file, alignment_output
