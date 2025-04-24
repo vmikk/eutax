@@ -1,8 +1,9 @@
-FROM python:3.12.10
+FROM python:3.12.10-slim
+# FROM python:3.12.10
 
 # Install system dependencies, along with BLAST and VSEARCH
 RUN apt-get update \
-  && apt-get install -y less \
+  && apt-get install -y less wget curl libgomp1 \
   && wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
   && tar -xzf "blast.tar.gz" \
   && rm -f "blast.tar.gz" \
