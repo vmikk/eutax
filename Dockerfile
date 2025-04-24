@@ -1,40 +1,76 @@
-FROM python:3.12.10-slim
-# FROM python:3.12.10
 
-# Install system dependencies, along with BLAST and VSEARCH
+### --- Builder stage ---
+
+FROM python:3.12.10-slim AS builder
+
+## Install system dependencies
 RUN apt-get update \
-  && apt-get install -y less wget curl libgomp1 \
-  && wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
-  && tar -xzf "blast.tar.gz" \
-  && rm -f "blast.tar.gz" \
-  && mv ncbi-blast-2.16.0+/bin/* /usr/bin/ \
-  && rm -rf ncbi-blast-2.16.0+ \
-  && wget -O "vsearch.tar.gz" 'https://github.com/torognes/vsearch/releases/download/v2.30.0/vsearch-2.30.0-linux-x86_64.tar.gz' \
-  && tar -xzf "vsearch.tar.gz" \
-  && rm -f "vsearch.tar.gz" \
-  && mv vsearch-2.30.0-linux-x86_64/bin/vsearch /usr/bin/ \
-  && rm -rf vsearch-2.30.0-linux-x86_64 \
-  && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal \
-  && echo 'source $HOME/.cargo/env' >> $HOME/.bashrc \
+  && apt-get install -y less wget curl \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
+## Install BLAST
+RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
+  && tar -xzf "blast.tar.gz" \
+  && rm -f "blast.tar.gz" \
+  && mv ncbi-blast-2.16.0+/bin/* /usr/local/bin/ \
+  && rm -rf ncbi-blast-2.16.0+
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
+## Install VSEARCH
+RUN wget -O "vsearch.tar.gz" 'https://github.com/torognes/vsearch/releases/download/v2.30.0/vsearch-2.30.0-linux-x86_64.tar.gz' \
+  && tar -xzf "vsearch.tar.gz" \
+  && rm -f "vsearch.tar.gz" \
+  && mv vsearch-2.30.0-linux-x86_64/bin/vsearch /usr/local/bin/ \
+  && rm -rf vsearch-2.30.0-linux-x86_64
+
+## Add lf
+RUN wget https://github.com/gokcehan/lf/releases/download/r34/lf-linux-amd64.tar.gz \
+  && tar -xvf lf-linux-amd64.tar.gz \
+  && mv lf /usr/local/bin/ \
+  && rm -f lf-linux-amd64.tar.gz
+
+## Install Rust (needed for pydantic-core)
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal \
+  && echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+## Copy requirements and install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+## Remove unnecessary cache and files to reduce layer size
+RUN pip cache purge \
+    && find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
+
+
+
+### --- Runtime stage ---
+
+FROM python:3.12.10-slim AS runtime
+
+RUN apt-get update \
+  && apt-get install -y less wget curl libgomp1 \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+## Set working directory
+WORKDIR /app
+
+## Copy installed packages from builder stage
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+## Copy application code
 COPY app/ /app/app/
 COPY run.py /app/
 
-# Create directories for uploads and outputs
+## Create directories for uploads and outputs
 RUN mkdir -p uploads outputs
 
-# Set environment variables
+## Set environment variables
 ENV UPLOAD_DIR=/app/uploads \
     OUTPUT_DIR=/app/outputs \
     PYTHONUNBUFFERED=1 \
