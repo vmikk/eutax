@@ -217,6 +217,10 @@ async def run_annotation(job_id: str):
             logger.info(f"Job {job_id} completed successfully in {cpu_time_seconds:.2f} CPU seconds")
         
         except Exception as e:
+            # Calculate elapsed CPU time up to the point of failure
+            end_time = time.time()
+            cpu_time_seconds = (end_time - start_time) * allocated_cpus
+            
             database.update_job_status(job_id, JobStatusEnum.FAILED)
             
             # Update job summary in SQLite with error status
@@ -230,7 +234,11 @@ async def run_annotation(job_id: str):
                 status=JobStatusEnum.FAILED,
                 created_at=job_data["created_at"],
                 started_at=job_data["started_at"],
-                completed_at=job_data["completed_at"]
+                completed_at=job_data["completed_at"],
+                seq_count=sequence_count,
+                seq_lengths=seq_lengths,
+                cpu_count=allocated_cpus,
+                cpu_time_seconds=round(cpu_time_seconds, 2)
             )
             
             logger.error(f"Error running job {job_id}: {str(e)}")
