@@ -10,9 +10,10 @@ from pydantic import BaseModel
 from typing import Dict
 import logging
 import logging.config
+import os
 
 from app.routers import uploads, jobs
-from app.auth import verify_api_key
+from app.auth import verify_api_key, API_KEY
 
 # Define custom logging configuration with timestamps
 log_config = {
@@ -44,6 +45,15 @@ log_config = {
 
 # Configure logging
 logging.config.dictConfig(log_config)
+logger = logging.getLogger("eutax")
+
+# ANSI escape codes for colored output
+class Colors:
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    RESET = "\033[0m"
 
 # Create FastAPI app
 app = FastAPI(
@@ -111,3 +121,19 @@ async def health_check():
             "annotation_services": "operational"
         }
     ) 
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Log API authentication status on startup
+    """
+    if API_KEY:
+        # Determine the source of the API key
+        secrets_path = "/run/secrets/api_key"
+        api_key_source = "Docker secrets" if os.path.exists(secrets_path) else "environment variable"
+        
+        print(f"{Colors.GREEN}API KEY IS SET - Protected endpoints require authentication{Colors.RESET}")
+        print(f"{Colors.BLUE}API key loaded from: {api_key_source}{Colors.RESET}")
+    else:
+        print(f"{Colors.RED}WARNING: API KEY IS NOT SET - ALL ENDPOINTS ARE UNPROTECTED!{Colors.RESET}")
+        print(f"{Colors.RED}To enable authentication, set the API_KEY environment variable or use Docker secrets{Colors.RESET}") 
