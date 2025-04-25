@@ -3,7 +3,7 @@ Main application file for EUTAX API - initializes FastAPI app, sets up middlewar
 includes routers, and defines basic endpoints.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ import logging
 import logging.config
 
 from app.routers import uploads, jobs
+from app.auth import verify_api_key
 
 # Define custom logging configuration with timestamps
 log_config = {
@@ -64,9 +65,28 @@ app.add_middleware(
 # Add GZipMiddleware to compress responses
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
+# Create protected routers with API key authentication
+protected_uploads_router = uploads.router
+protected_jobs_router = jobs.router
+
+# Create router for unprotected endpoints
+from fastapi import APIRouter
+unprotected_router = APIRouter()
+
+# Job count endpoint (unprotected)
+@unprotected_router.get("/job_count", response_model=Dict[str, int])
+async def get_job_count():
+    """
+    Get the total number of jobs executed.
+    """
+    from app import db_storage
+    count = await db_storage.get_job_count()
+    return {"count": count}
+
 # Include routers
-app.include_router(uploads.router, prefix="/api/v1", tags=["Uploads"])
-app.include_router(jobs.router, prefix="/api/v1", tags=["Jobs"])
+app.include_router(protected_uploads_router, prefix="/api/v1", tags=["Uploads"], dependencies=[Depends(verify_api_key)])
+app.include_router(protected_jobs_router, prefix="/api/v1", tags=["Jobs"], dependencies=[Depends(verify_api_key)])
+app.include_router(unprotected_router, prefix="/api/v1", tags=["Public"])
 
 class HealthResponse(BaseModel):
     status: str
