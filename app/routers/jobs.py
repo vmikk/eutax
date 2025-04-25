@@ -177,15 +177,6 @@ async def get_job_summaries(
     return summaries
 
 
-@router.get("/jobs/count", response_model=Dict[str, int])
-async def get_job_count():
-    """
-    Get the total number of jobs executed.
-    """
-    count = await db_storage.get_job_count()
-    return {"count": count}
-
-
 @router.get("/jobs/{job_id}/summary", response_model=Dict[str, Any])
 async def get_job_summary(job_id: str):
     """
