@@ -5,6 +5,7 @@ includes routers, and defines basic endpoints.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from typing import Dict
 import logging
@@ -59,6 +60,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add GZipMiddleware to compress responses
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 
 # Include routers
 app.include_router(uploads.router, prefix="/api/v1", tags=["Uploads"])
