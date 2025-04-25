@@ -77,6 +77,12 @@ ENV UPLOAD_DIR=/app/uploads \
     MAX_CPUS=8 \
     MAX_CONCURRENT_JOBS=2
 
+## Note about API_KEY:
+## The `API_KEY` variable should be provided at runtime rather than hardcoded here
+## If not set, authentication is skipped (for "protected" endpoints)
+## E.g., docker run -e API_KEY=your_secret_key ...
+
+
 ## Healthcheck to verify the API is up
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
     CMD curl --fail http://localhost:8000/api/v1/health || exit 1
