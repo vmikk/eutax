@@ -47,7 +47,8 @@ async def upload_fasta(file: UploadFile = File(...)):
     """
     # Check file size
     MAX_SIZE = 50 * 1024 * 1024   # 50 MB
-    if await file.read(MAX_SIZE + 1) > MAX_SIZE:
+    content = await file.read(MAX_SIZE + 1)
+    if len(content) > MAX_SIZE:
         raise HTTPException(status_code=413, detail={
             "error": {"code": 413, "message": "File too large"}})
     await file.seek(0)  # Reset file position
