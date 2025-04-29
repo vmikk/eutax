@@ -78,12 +78,17 @@ ENV UPLOAD_DIR=/app/uploads \
     OUTPUT_DIR=/app/outputs \
     PYTHONUNBUFFERED=1 \
     MAX_CPUS=8 \
-    MAX_CONCURRENT_JOBS=2
+    MAX_CONCURRENT_JOBS=2 \
+    DISABLE_DOCS=true
 
 ## Note about API_KEY:
 ## The `API_KEY` variable should be provided at runtime rather than hardcoded here
 ## If not set, authentication is skipped (for "protected" endpoints)
 ## E.g., docker run -e API_KEY=your_secret_key ...
+
+## Note about DISABLE_DOCS:
+## If set to true, the API documentation (Swagger UI, ReDoc, and OpenAPI JSON schema) is disabled
+
 
 ## Switch to non-root user
 USER fastapi
