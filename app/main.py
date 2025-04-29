@@ -142,3 +142,10 @@ async def startup_event():
     else:
         print(f"{Colors.RED}WARNING: API KEY IS NOT SET - ALL ENDPOINTS ARE UNPROTECTED!{Colors.RESET}")
         print(f"{Colors.RED}To enable authentication, set the API_KEY environment variable or use Docker secrets{Colors.RESET}") 
+
+    # Log documentation status
+    if DISABLE_DOCS:
+        print(f"{Colors.YELLOW}API documentation (Swagger UI, ReDoc) is DISABLED{Colors.RESET}")
+    else:
+        print(f"{Colors.BLUE}API documentation is ENABLED - available at /docs and /redoc{Colors.RESET}")
+
