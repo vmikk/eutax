@@ -110,7 +110,10 @@ class HealthResponse(BaseModel):
 
 @app.get("/", tags=["Root"])
 async def root():
-    return {"message": "Welcome to the EUTAX. Visit /docs for API documentation."} 
+    if DISABLE_DOCS:
+        return {"message": "EUTAX API. Access to this endpoint is restricted, unauthorized requests will be logged."} 
+    else:
+        return {"message": "Welcome to EUTAX - the taxonomic annotation API for DNA sequences. Visit /docs or /redoc for API documentation."}
 
 @app.get("/api/v1/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
