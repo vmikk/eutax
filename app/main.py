@@ -55,12 +55,17 @@ class Colors:
     BLUE = "\033[94m"
     RESET = "\033[0m"
 
+# Check if docs should be disabled
+DISABLE_DOCS = os.getenv("DISABLE_DOCS", "false").lower() == "true"
+
 # Create FastAPI app
 app = FastAPI(
     title="EUTAX",
     description="API for taxonomic annotation of DNA sequences",
     version="0.0.1",
-    docs_url="/docs",
+    docs_url=None if DISABLE_DOCS else "/docs",
+    redoc_url=None if DISABLE_DOCS else "/redoc",
+    openapi_url=None if DISABLE_DOCS else "/openapi.json",
 )
 
 # Add CORS middleware
