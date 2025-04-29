@@ -67,8 +67,11 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY app/ /app/app/
 COPY run.py /app/
 
-## Create directories for uploads and outputs
-RUN mkdir -p uploads outputs
+## Create non-root user and set permissions
+RUN groupadd -r fastapi && useradd -r -g fastapi fastapi \
+    && mkdir -p uploads outputs \
+    && chown -R fastapi:fastapi /app \
+    && chmod -R 755 /app
 
 ## Set environment variables
 ENV UPLOAD_DIR=/app/uploads \
@@ -82,6 +85,8 @@ ENV UPLOAD_DIR=/app/uploads \
 ## If not set, authentication is skipped (for "protected" endpoints)
 ## E.g., docker run -e API_KEY=your_secret_key ...
 
+## Switch to non-root user
+USER fastapi
 
 ## Healthcheck to verify the API is up
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
@@ -90,5 +95,5 @@ HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
 ## Expose port
 EXPOSE 8000
 
-# Run the application
+## Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
