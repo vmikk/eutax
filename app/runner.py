@@ -303,6 +303,16 @@ async def run_vsearch_async(input_file: str, output_dir: str, algorithm: str, db
 def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> str:
     """
     Run BLAST command and return output file path.
+
+    Args:
+        input_file: path to input FASTA file
+        output_dir: directory to write output files
+        algorithm: BLAST algorithm (blastn or megablast)
+        db_path: path to the database
+        parameters: additional parameters for BLAST
+        
+    Returns:
+        Path to results file
     """
     # Use provided parameters or defaults
     max_target_seqs = parameters.get("max_target_seqs", DEFAULT_BLAST_PARAMS["max_target_seqs"])
