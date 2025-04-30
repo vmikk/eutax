@@ -83,6 +83,15 @@ class JobRequest(BaseModel):
             raise ValueError("Database path contains invalid characters")
             
         return normalized_path
+    
+    @validator('parameters')
+    def sanitize_parameters(cls, v):
+        # Sanitize parameter values
+        if v and isinstance(v, dict):
+            for key, value in v.items():
+                if isinstance(value, str) and any(c in value for c in ';&|`$()><'):
+                    raise ValueError(f"Parameter '{key}' contains invalid characters")
+        return v
 
 
 class JobResponse(BaseModel):
