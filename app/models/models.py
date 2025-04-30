@@ -40,11 +40,21 @@ class SequenceUploadResponse(BaseModel):
 class JobRequest(BaseModel):
     file_id: str = Field(..., description="Identifier for the uploaded sequence")
     tool: ToolEnum = Field(..., description="Tool to use (blast, vsearch)")
-    algorithm: str = Field(..., description="Algorithm variant (blastn, megablast for BLAST)")
+    algorithm: AlgorithmEnum = Field(..., description="Algorithm variant for the selected tool (blastn, megablast for BLAST; usearch_global, search_exact for VSEARCH)")
     database: str = Field(..., description="Database path or identifier")
     parameters: Optional[Dict[str, Union[str, int, float]]] = Field(
         {}, description="Additional tool-specific parameters"
     )
+    
+    @validator('algorithm')
+    def validate_algorithm_for_tool(cls, v, values):
+        if 'tool' in values:
+            if values['tool'] == ToolEnum.BLAST and v not in [AlgorithmEnum.BLASTN, AlgorithmEnum.MEGABLAST]:
+                raise ValueError(f"Algorithm '{v}' not supported for BLAST. Use 'blastn' or 'megablast'")
+            elif values['tool'] == ToolEnum.VSEARCH and v not in [AlgorithmEnum.USEARCH_GLOBAL, AlgorithmEnum.SEARCH_EXACT]:
+                raise ValueError(f"Algorithm '{v}' not supported for VSEARCH. Use 'usearch_global' or 'search_exact'")
+        return v
+    
 
 
 class JobResponse(BaseModel):
