@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from enum import Enum
 from datetime import datetime
+from pydantic import validator
+import os
+import re
 
 
 class ToolEnum(str, Enum):
@@ -55,6 +58,31 @@ class JobRequest(BaseModel):
                 raise ValueError(f"Algorithm '{v}' not supported for VSEARCH. Use 'usearch_global' or 'search_exact'")
         return v
     
+    @validator('database')
+    def validate_database_path(cls, v):
+        # Normalize path to handle any path traversal attempts
+        normalized_path = os.path.normpath(v)
+        
+        # Check for path traversal patterns after normalization
+        if '..' in normalized_path:
+            raise ValueError("Path traversal detected in database path")
+            
+        # # TODO - Validate against allowed directories
+        # if normalized_path.startswith('/'):
+        #     allowed_db_dirs = [
+        #         '/data/Eukaryome',
+        #         '/data/DB'
+        #     ]
+        #     
+        #     # Check if the path is within any allowed directory
+        #     if not any(normalized_path.startswith(allowed_dir) for allowed_dir in allowed_db_dirs):
+        #         raise ValueError(f"Database path must be within allowed directories: {', '.join(allowed_db_dirs)}")
+        
+        # Additional security: Only allow alphanumeric, underscore, dash, dot, and slashes
+        if not re.match(r'^[a-zA-Z0-9_\-./]+$', normalized_path):
+            raise ValueError("Database path contains invalid characters")
+            
+        return normalized_path
 
 
 class JobResponse(BaseModel):
