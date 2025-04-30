@@ -162,6 +162,7 @@ async def run_annotation(job_id: str):
                 output_path, alignment_output = await run_vsearch_async(
                     input_file, 
                     job_output_dir, 
+                    algorithm,
                     db_path or DEFAULT_UDB_DB, 
                     parameters
                 )
@@ -384,7 +385,7 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
     return results_file
 
 
-def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
+def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
     """
     Run VSEARCH command and return output file path.
     """
@@ -424,22 +425,30 @@ def run_vsearch(input_file: str, output_dir: str, db_path: str, parameters: Dict
     # Build command
     cmd = [
         "vsearch",
-        "--usearch_global", input_file,
+        algorithm, input_file,
         "--db", db_path,
-        "--id", str(min_identity / 100),        # Convert from percentage to decimal
-        "--query_cov", str(min_coverage / 100), # Convert from percentage to decimal
-        # "--blast6out", results_file,
-        "--userout",  results_file,
+    ]
+    
+    # Add search parameters only for usearch_global algorithm
+    if "search_exact" not in algorithm:
+        cmd.extend([
+            "--id", str(min_identity / 100),        # Convert from percentage to decimal
+            "--query_cov", str(min_coverage / 100), # Convert from percentage to decimal
+            "--maxaccepts", str(maxaccepts),
+            "--maxrejects", str(maxrejects),
+        ])
+    
+    # Add common parameters
+    cmd.extend([
+        "--userout", results_file,
         "--userfields", outfmt,
         "--alnout", alignment_output,
         "--rowlen", str(99999),
         "--strand", "both",
-        "--maxaccepts", str(maxaccepts),
-        "--maxrejects", str(maxrejects),
         "--maxhits", str(maxhits),
         "--threads", str(num_threads),
         "--quiet"
-    ]
+    ])
     
     logger.info(f"Running VSEARCH command: {' '.join(cmd)}")
     
