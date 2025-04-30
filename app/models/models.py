@@ -15,8 +15,12 @@ class ToolEnum(str, Enum):
 
 
 class AlgorithmEnum(str, Enum):
+    # BLAST algorithms
     BLASTN = "blastn"
     MEGABLAST = "megablast"
+    # VSEARCH algorithms
+    USEARCH_GLOBAL = "usearch_global"
+    SEARCH_EXACT = "search_exact"
 
 
 class JobStatusEnum(str, Enum):
