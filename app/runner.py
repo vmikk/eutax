@@ -432,6 +432,9 @@ def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, 
     # ql       Query sequence length
     # tl       Target sequence length
 
+    if not algorithm.startswith("--"):
+        algorithm = "--" + algorithm
+
     # Build command
     cmd = [
         "vsearch",
