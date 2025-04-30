@@ -284,7 +284,7 @@ async def run_blast_async(input_file: str, output_dir: str, algorithm: str, db_p
     )
 
 
-async def run_vsearch_async(input_file: str, output_dir: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
+async def run_vsearch_async(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
     """
     Asynchronous wrapper around run_vsearch to execute it in a thread pool.
     """
@@ -295,7 +295,7 @@ async def run_vsearch_async(input_file: str, output_dir: str, db_path: str, para
     return await asyncio.get_event_loop().run_in_executor(
         thread_pool,
         run_vsearch,
-        input_file, output_dir, db_path, adjusted_parameters
+        input_file, output_dir, algorithm, db_path, adjusted_parameters
     )
 
 
