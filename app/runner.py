@@ -388,6 +388,16 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
 def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, parameters: Dict) -> Tuple[str, str]:
     """
     Run VSEARCH command and return output file path.
+    
+    Args:
+        input_file: path to input FASTA file
+        output_dir: directory to write output files
+        algorithm: VSEARCH algorithm (usearch_global or search_exact)
+        db_path: path to the database
+        parameters: additional parameters for VSEARCH
+        
+    Returns:
+        Tuple containing paths to results file and alignment file
     """
     # Use provided parameters or defaults
     min_identity = parameters.get("id", DEFAULT_VSEARCH_PARAMS["id"])
