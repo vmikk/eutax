@@ -59,7 +59,7 @@ class JobRequest(BaseModel):
         return v
     
     @validator('database')
-    def validate_database_path(cls, v):
+    def validate_database_path(cls, v, values):
         # Normalize path to handle any path traversal attempts
         normalized_path = os.path.normpath(v)
         
@@ -81,6 +81,17 @@ class JobRequest(BaseModel):
         # Additional security: Only allow alphanumeric, underscore, dash, dot, and slashes
         if not re.match(r'^[a-zA-Z0-9_\-./]+$', normalized_path):
             raise ValueError("Database path contains invalid characters")
+        
+        # Validate file format based on tool and algorithm
+        if 'tool' in values and values['tool'] == ToolEnum.VSEARCH:
+            if 'algorithm' in values:
+                if values['algorithm'] == AlgorithmEnum.USEARCH_GLOBAL:
+                    if not normalized_path.endswith('.udb'):
+                        raise ValueError("For VSEARCH with usearch_global algorithm, database must be in UDB format (*.udb)")
+                elif values['algorithm'] == AlgorithmEnum.SEARCH_EXACT:
+                    fasta_extensions = ['.fa', '.fasta', '.fa.gz', '.fasta.gz']
+                    if not any(normalized_path.endswith(ext) for ext in fasta_extensions):
+                        raise ValueError("For VSEARCH with search_exact algorithm, database must be in FASTA format (*.fa, *.fasta, *.fa.gz, *.fasta.gz)")
             
         return normalized_path
     
