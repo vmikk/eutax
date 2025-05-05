@@ -119,6 +119,120 @@ def parse_fasta(fasta_file: str) -> Dict[str, int]:
     return query_info
 
 
+def get_taxonomy_from_sseqid(sseqid: str) -> Dict[str, str]:
+    """
+    Extract taxonomy information from subject sequence ID based on its format.
+    
+    Args:
+        sseqid: The subject sequence ID
+        
+    Returns:
+        Dictionary with taxonomy information
+    """
+    if ';' in sseqid:
+        try:
+            return parse_sseqid(sseqid)
+        except:
+            # Fallback for malformed identifiers
+            return {"accession": sseqid, "species": sseqid}
+    else:
+        # For non-taxonomy format identifiers
+        return {"accession": sseqid, "species": sseqid}
+
+
+def initialize_results_structure() -> Dict[str, Any]:
+    """
+    Initialize the standard results structure.
+    
+    Returns:
+        Empty results dictionary with standard structure
+    """
+    return {"results": [], "summary": {}}
+
+
+def handle_empty_results(query_info: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    """
+    Create a properly structured results object for the case when no hits are found.
+    
+    Args:
+        query_info: Optional dictionary mapping query IDs to their sequence lengths
+        
+    Returns:
+        Results dictionary with empty hits but correct query counts
+    """
+    result = initialize_results_structure()
+    
+    # If query_info is provided, use it to report the total_queries correctly
+    total_queries = len(query_info) if query_info else 0
+    
+    # Create empty results with correct query count
+    result["summary"] = {
+        "total_queries": total_queries,
+        "total_hits": 0
+    }
+    
+    # If we have query information but no hits, add empty entries for each query
+    if query_info:
+        for qid, length in query_info.items():
+            result["results"].append({
+                "query_id": qid,
+                "query_length": length,
+                "hit_count": 0,
+                "hits": []
+            })
+    
+    return result
+
+
+def add_missing_queries(result: Dict[str, Any], result_query_ids: Set[str], 
+                        query_info: Dict[str, int]) -> Dict[str, Any]:
+    """
+    Add entries for queries that have no hits to the results.
+    
+    Args:
+        result: Current results dictionary
+        result_query_ids: Set of query IDs that have hits
+        query_info: Dictionary mapping query IDs to their sequence lengths
+        
+    Returns:
+        Updated results dictionary with entries for queries without hits
+    """
+    # Find query IDs that have no hits
+    no_hit_queries = set(query_info.keys()) - result_query_ids
+    
+    # Add empty result entries for each query with no hits
+    for qid in no_hit_queries:
+        result["results"].append({
+            "query_id": qid,
+            "query_length": query_info[qid],
+            "hit_count": 0,
+            "hits": []
+        })
+    
+    return result
+
+
+def finalize_results(result: Dict[str, Any], total_queries: int, 
+                     total_hits: int) -> Dict[str, Any]:
+    """
+    Add summary information to the results.
+    
+    Args:
+        result: Current results dictionary
+        total_queries: Total number of queries
+        total_hits: Total number of hits
+        
+    Returns:
+        Finalized results dictionary with summary information
+    """
+    result["summary"] = {
+        "total_queries": total_queries,
+        "total_hits": total_hits
+    }
+    
+    return result
+
+
 ########################################### BLAST results
 
 ## Customized format for BLAST results (with extra columns 13+)
@@ -167,31 +281,12 @@ def parse_blast_results(file_path: str, query_info: Optional[Dict[str, int]] = N
     except Exception as e:
         return {"error": f"Failed to parse BLAST results: {str(e)}"}
     
-    # Initialize result structure
-    result = {"results": [], "summary": {}}
-    
     # Handle empty result case
     if df.empty:
-        # If query_info is provided, use it to report the total_queries correctly
-        total_queries = len(query_info) if query_info else 0
-        
-        # Create empty results with correct query count
-        result["summary"] = {
-            "total_queries": total_queries,
-            "total_hits": 0
-        }
-        
-        # If we have query information but no hits, add empty entries for each query
-        if query_info:
-            for qid, length in query_info.items():
-                result["results"].append({
-                    "query_id": qid,
-                    "query_length": length,
-                    "hit_count": 0,
-                    "hits": []
-                })
-                
-        return result
+        return handle_empty_results(query_info)
+    
+    # Initialize result structure
+    result = initialize_results_structure()
     
     # Get the set of query IDs from the results
     result_query_ids = set(df["qseqid"].unique())
@@ -252,31 +347,14 @@ def parse_blast_results(file_path: str, query_info: Optional[Dict[str, int]] = N
     
     # If query_info was provided, add entries for queries with no hits
     if query_info:
-        # Find query IDs that have no hits
-        no_hit_queries = set(query_info.keys()) - result_query_ids
-        
-        # Add empty result entries for each query with no hits
-        for qid in no_hit_queries:
-            result["results"].append({
-                "query_id": qid,
-                "query_length": query_info[qid],
-                "hit_count": 0,
-                "hits": []
-            })
-        
-        # Update total_queries to include all queries from the input
+        result = add_missing_queries(result, result_query_ids, query_info)
         total_queries = len(query_info)
     else:
         # If no query_info provided, use the count from the results
         total_queries = len(query_groups)
     
     # Add summary information
-    result["summary"] = {
-        "total_queries": total_queries,
-        "total_hits": len(df)
-    }
-    
-    return result
+    return finalize_results(result, total_queries, len(df))
 
 
 def parse_blast_file_to_json(file_path: str, output_path: Optional[str] = None, query_fasta: Optional[str] = None) -> str:
@@ -394,6 +472,23 @@ def parse_vsearch_alignments(file_path: str) -> Dict[str, Dict[str, Dict[str, st
     return alignments
 
 
+def normalize_strand_naming(strand: Optional[str]) -> Optional[str]:
+    """
+    Normalize strand notation to match BLAST format.
+    
+    Args:
+        strand: Strand notation ('+', '-', or None)
+        
+    Returns:
+        Normalized strand notation ('plus', 'minus', or None)
+    """
+    if strand == "+":
+        return "plus"
+    elif strand == "-":
+        return "minus"
+    return strand
+
+
 def parse_vsearch_results(userout_file: str, alnout_file: str, query_info: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """
     Parse VSEARCH tabular output and alignment file, combining them into a structured format
@@ -424,31 +519,12 @@ def parse_vsearch_results(userout_file: str, alnout_file: str, query_info: Optio
     except Exception as e:
         return {"error": f"Failed to parse VSEARCH results: {str(e)}"}
     
-    # Initialize result structure
-    result = {"results": [], "summary": {}}
-    
     # Handle empty result case
     if df.empty:
-        # If query_info is provided, use it to report the total_queries correctly
-        total_queries = len(query_info) if query_info else 0
-        
-        # Create empty results with correct query count
-        result["summary"] = {
-            "total_queries": total_queries,
-            "total_hits": 0
-        }
-        
-        # If we have query information but no hits, add empty entries for each query
-        if query_info:
-            for qid, length in query_info.items():
-                result["results"].append({
-                    "query_id": qid,
-                    "query_length": length,
-                    "hit_count": 0,
-                    "hits": []
-                })
-                
-        return result
+        return handle_empty_results(query_info)
+    
+    # Initialize result structure
+    result = initialize_results_structure()
     
     # Get the set of query IDs from the results
     result_query_ids = set(df["qseqid"].unique())
@@ -470,27 +546,13 @@ def parse_vsearch_results(userout_file: str, alnout_file: str, query_info: Optio
                 sseq = sequence_data[query_id][target_id]["sseq"]
             
             # Parse taxonomy from sseqid if possible
-            taxonomy = {}
-            if ';' in target_id:
-                try:
-                    taxonomy = parse_sseqid(target_id)
-                except:
-                    # If parse_sseqid is not available, create a minimal taxonomy dict
-                    taxonomy = {"accession": target_id, "species": target_id}
-            else:
-                taxonomy = {"accession": target_id, "species": target_id}
+            taxonomy = get_taxonomy_from_sseqid(target_id)
             
             # Format the alignment if sequences are available
-            alignment = None
-            if qseq and sseq:
-                alignment = format_alignment(qseq, sseq)
+            alignment = format_alignment(qseq, sseq) if qseq and sseq else None
 
-            # Recode strand naming to match BLAST
-            sstrand = row["sstrand"] if "sstrand" in row else None
-            if sstrand == "+":
-                sstrand = "plus"
-            elif sstrand == "-":
-                sstrand = "minus"
+            # Normalize strand naming
+            sstrand = normalize_strand_naming(row["sstrand"] if "sstrand" in row else None)
 
             # Create a hit entry
             hit = {
@@ -537,31 +599,14 @@ def parse_vsearch_results(userout_file: str, alnout_file: str, query_info: Optio
     
     # If query_info was provided, add entries for queries with no hits
     if query_info:
-        # Find query IDs that have no hits
-        no_hit_queries = set(query_info.keys()) - result_query_ids
-        
-        # Add empty result entries for each query with no hits
-        for qid in no_hit_queries:
-            result["results"].append({
-                "query_id": qid,
-                "query_length": query_info[qid],
-                "hit_count": 0,
-                "hits": []
-            })
-        
-        # Update total_queries to include all queries from the input
+        result = add_missing_queries(result, result_query_ids, query_info)
         total_queries = len(query_info)
     else:
         # If no query_info provided, use the count from the results
         total_queries = len(query_groups)
     
     # Add summary information
-    result["summary"] = {
-        "total_queries": total_queries,
-        "total_hits": len(df)
-    }
-    
-    return result
+    return finalize_results(result, total_queries, len(df))
 
 
 def parse_vsearch_file_to_json(userout_file: str, alnout_file: str, output_path: Optional[str] = None, query_fasta: Optional[str] = None) -> str:
