@@ -147,7 +147,8 @@ async def run_annotation(job_id: str):
                     thread_pool,
                     parse_blast_file_to_json,
                     output_path, 
-                    json_output_path
+                    json_output_path,
+                    input_file  # Pass the input FASTA file to correctly count queries
                 )
                 logger.info(f"Parsed BLAST results saved to {json_output_path}")
                 
@@ -174,7 +175,8 @@ async def run_annotation(job_id: str):
                     parse_vsearch_file_to_json,
                     output_path, 
                     alignment_output,
-                    json_output_path
+                    json_output_path,
+                    input_file  # Pass the input FASTA file to correctly count queries
                 )
                 logger.info(f"Parsed VSEARCH results saved to {json_output_path}")
                 

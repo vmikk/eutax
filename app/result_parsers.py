@@ -5,7 +5,7 @@ tools like BLAST and VSEARCH to extract taxonomic information.
 
 import json
 import pandas as pd
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set, Tuple
 from pathlib import Path
 
 
@@ -80,6 +80,45 @@ def format_alignment(qseq: str, sseq: str) -> Dict[str, Any]:
     }
 
 
+def parse_fasta(fasta_file: str) -> Dict[str, int]:
+    """
+    Extract sequence IDs and their lengths from a FASTA file.
+    
+    Args:
+        fasta_file: Path to the FASTA file
+        
+    Returns:
+        Dictionary mapping sequence IDs to their lengths
+    """
+    query_info = {}  # Maps query ID to sequence length
+    current_id = None
+    current_seq = []
+    
+    try:
+        with open(fasta_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith('>'):
+                    # Save previous sequence if there was one
+                    if current_id is not None:
+                        query_info[current_id] = len(''.join(current_seq))
+                    
+                    # Extract ID without the '>' character and trim whitespace
+                    current_id = line[1:].split()[0].strip()
+                    current_seq = []
+                elif current_id is not None:
+                    # Append to current sequence
+                    current_seq.append(line)
+            
+            # Save the last sequence
+            if current_id is not None:
+                query_info[current_id] = len(''.join(current_seq))
+    except Exception as e:
+        return {}
+    
+    return query_info
+
+
 ########################################### BLAST results
 
 ## Customized format for BLAST results (with extra columns 13+)
@@ -104,12 +143,13 @@ def format_alignment(qseq: str, sseq: str) -> Dict[str, Any]:
 
 
 
-def parse_blast_results(file_path: str) -> Dict[str, Any]:
+def parse_blast_results(file_path: str, query_info: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """
     Parse BLAST output file and convert to structured JSON format.
     
     Args:
         file_path: Path to the BLAST output file
+        query_info: Optional dictionary mapping query IDs to their sequence lengths
         
     Returns:
         Dictionary with parsed results grouped by query ID
@@ -127,11 +167,36 @@ def parse_blast_results(file_path: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": f"Failed to parse BLAST results: {str(e)}"}
     
+    # Initialize result structure
+    result = {"results": [], "summary": {}}
+    
+    # Handle empty result case
     if df.empty:
-        return {"results": [], "summary": {"total_queries": 0, "total_hits": 0}}
+        # If query_info is provided, use it to report the total_queries correctly
+        total_queries = len(query_info) if query_info else 0
+        
+        # Create empty results with correct query count
+        result["summary"] = {
+            "total_queries": total_queries,
+            "total_hits": 0
+        }
+        
+        # If we have query information but no hits, add empty entries for each query
+        if query_info:
+            for qid, length in query_info.items():
+                result["results"].append({
+                    "query_id": qid,
+                    "query_length": length,
+                    "hit_count": 0,
+                    "hits": []
+                })
+                
+        return result
+    
+    # Get the set of query IDs from the results
+    result_query_ids = set(df["qseqid"].unique())
     
     # Group by query ID
-    result = {"results": [], "summary": {}}
     query_groups = df.groupby("qseqid")
     
     for query_id, group in query_groups:
@@ -170,37 +235,68 @@ def parse_blast_results(file_path: str) -> Dict[str, Any]:
         # Sort hits (mainly by bitscore & evalue)
         hits.sort(key=lambda x: (-x["bitscore"], x["evalue"], -x["pident"], -x["length"], -x["qcovs"], x["sseqid"]))
         
+        # Get query length from the results or from the provided query_info dictionary
+        query_length = int(group["qlen"].iloc[0]) if not pd.isna(group["qlen"].iloc[0]) else None
+        if query_length is None and query_info and query_id in query_info:
+            query_length = query_info[query_id]
+            
         # Add to results
         query_result = {
             "query_id": query_id,
-            "query_length": int(group["qlen"].iloc[0]) if not pd.isna(group["qlen"].iloc[0]) else None,
+            "query_length": query_length,
             "hit_count": len(hits),
             "hits": hits
         }
         
         result["results"].append(query_result)
     
+    # If query_info was provided, add entries for queries with no hits
+    if query_info:
+        # Find query IDs that have no hits
+        no_hit_queries = set(query_info.keys()) - result_query_ids
+        
+        # Add empty result entries for each query with no hits
+        for qid in no_hit_queries:
+            result["results"].append({
+                "query_id": qid,
+                "query_length": query_info[qid],
+                "hit_count": 0,
+                "hits": []
+            })
+        
+        # Update total_queries to include all queries from the input
+        total_queries = len(query_info)
+    else:
+        # If no query_info provided, use the count from the results
+        total_queries = len(query_groups)
+    
     # Add summary information
     result["summary"] = {
-        "total_queries": len(query_groups),
+        "total_queries": total_queries,
         "total_hits": len(df)
     }
     
     return result
 
 
-def parse_blast_file_to_json(file_path: str, output_path: Optional[str] = None) -> str:
+def parse_blast_file_to_json(file_path: str, output_path: Optional[str] = None, query_fasta: Optional[str] = None) -> str:
     """
     Parse a BLAST output file and save the results as JSON.
     
     Args:
         file_path: Path to the BLAST output file
         output_path: Optional path to save the JSON output (if None, JSON is returned as string)
+        query_fasta: Optional path to the input FASTA file to extract query IDs
         
     Returns:
         JSON string or file path where JSON was saved
     """
-    results = parse_blast_results(file_path)
+    # Parse query information from FASTA if provided
+    query_info = None
+    if query_fasta:
+        query_info = parse_fasta(query_fasta)
+    
+    results = parse_blast_results(file_path, query_info)
     
     if output_path:
         with open(output_path, 'w') as f:
@@ -298,7 +394,7 @@ def parse_vsearch_alignments(file_path: str) -> Dict[str, Dict[str, Dict[str, st
     return alignments
 
 
-def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]:
+def parse_vsearch_results(userout_file: str, alnout_file: str, query_info: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """
     Parse VSEARCH tabular output and alignment file, combining them into a structured format
     similar to BLAST results.
@@ -306,6 +402,7 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
     Args:
         userout_file: Path to the VSEARCH tabular output file (--userout + --userfields)
         alnout_file: Path to the VSEARCH alignment output file (--alnout)
+        query_info: Optional dictionary mapping query IDs to their sequence lengths
         
     Returns:
         Dictionary with parsed results grouped by query ID
@@ -327,11 +424,36 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
     except Exception as e:
         return {"error": f"Failed to parse VSEARCH results: {str(e)}"}
     
+    # Initialize result structure
+    result = {"results": [], "summary": {}}
+    
+    # Handle empty result case
     if df.empty:
-        return {"results": [], "summary": {"total_queries": 0, "total_hits": 0}}
+        # If query_info is provided, use it to report the total_queries correctly
+        total_queries = len(query_info) if query_info else 0
+        
+        # Create empty results with correct query count
+        result["summary"] = {
+            "total_queries": total_queries,
+            "total_hits": 0
+        }
+        
+        # If we have query information but no hits, add empty entries for each query
+        if query_info:
+            for qid, length in query_info.items():
+                result["results"].append({
+                    "query_id": qid,
+                    "query_length": length,
+                    "hit_count": 0,
+                    "hits": []
+                })
+                
+        return result
+    
+    # Get the set of query IDs from the results
+    result_query_ids = set(df["qseqid"].unique())
     
     # Group by query ID
-    result = {"results": [], "summary": {}}
     query_groups = df.groupby("qseqid")
     
     for query_id, group in query_groups:
@@ -398,26 +520,51 @@ def parse_vsearch_results(userout_file: str, alnout_file: str) -> Dict[str, Any]
         # Sort hits by percent identity, length, and query coverage (since bitscore is not available in VSEARCH)
         hits.sort(key=lambda x: (-x["pident"], -x["length"], -x["qcovs"], x["sseqid"]))
         
+        # Get query length from the results or from the provided query_info dictionary
+        query_length = int(group["qlen"].iloc[0]) if not pd.isna(group["qlen"].iloc[0]) else None
+        if query_length is None and query_info and query_id in query_info:
+            query_length = query_info[query_id]
+            
         # Add to results
         query_result = {
             "query_id": query_id,
-            "query_length": int(group["qlen"].iloc[0]) if not pd.isna(group["qlen"].iloc[0]) else None,
+            "query_length": query_length,
             "hit_count": len(hits),
             "hits": hits
         }
         
         result["results"].append(query_result)
     
+    # If query_info was provided, add entries for queries with no hits
+    if query_info:
+        # Find query IDs that have no hits
+        no_hit_queries = set(query_info.keys()) - result_query_ids
+        
+        # Add empty result entries for each query with no hits
+        for qid in no_hit_queries:
+            result["results"].append({
+                "query_id": qid,
+                "query_length": query_info[qid],
+                "hit_count": 0,
+                "hits": []
+            })
+        
+        # Update total_queries to include all queries from the input
+        total_queries = len(query_info)
+    else:
+        # If no query_info provided, use the count from the results
+        total_queries = len(query_groups)
+    
     # Add summary information
     result["summary"] = {
-        "total_queries": len(query_groups),
+        "total_queries": total_queries,
         "total_hits": len(df)
     }
     
     return result
 
 
-def parse_vsearch_file_to_json(userout_file: str, alnout_file: str, output_path: Optional[str] = None) -> str:
+def parse_vsearch_file_to_json(userout_file: str, alnout_file: str, output_path: Optional[str] = None, query_fasta: Optional[str] = None) -> str:
     """
     Parse VSEARCH output files and save the results as JSON.
     
@@ -425,11 +572,17 @@ def parse_vsearch_file_to_json(userout_file: str, alnout_file: str, output_path:
         userout_file: Path to the VSEARCH tabular output file (--userout + --userfields)
         alnout_file: Path to the VSEARCH alignment output file (--alnout)
         output_path: Optional path to save the JSON output (if None, JSON is returned as string)
+        query_fasta: Optional path to the input FASTA file to extract query IDs
         
     Returns:
         JSON string or file path where JSON was saved
     """
-    results = parse_vsearch_results(userout_file, alnout_file)
+    # Parse query information from FASTA if provided
+    query_info = None
+    if query_fasta:
+        query_info = parse_fasta(query_fasta)
+        
+    results = parse_vsearch_results(userout_file, alnout_file, query_info)
     
     if output_path:
         with open(output_path, 'w') as f:
