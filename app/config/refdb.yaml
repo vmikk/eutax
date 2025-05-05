@@ -1,0 +1,41 @@
+refdbs:
+
+  # EUKARYOME ITS database
+  eukaryome_its:
+    description: "EUKARYOME ITS rRNA reference database"
+    version: "1.9.4"
+    regions: ["ITS"]
+    paths:
+      blast:          "/data/EUKARYOME/1.9.4/EU194_ITS/EU194_ITS"
+      vsearch_global: "/data/EUKARYOME/1.9.4/EU194_ITS.udb"
+      vsearch_exact:  "/data/EUKARYOME/1.9.4/EU194_ITS.fasta.gz"
+
+  # EUKARYOME SSU database
+  eukaryome_ssu:
+    description: "EUKARYOME SSU (18S) rRNA reference database"
+    version: "1.9.4"
+    regions: ["SSU"]
+    paths:
+      blast:          "/data/EUKARYOME/1.9.4/EU194_SSU/EU194_SSU"
+      vsearch_global: "/data/EUKARYOME/1.9.4/EU194_SSU.udb"
+      vsearch_exact:  "/data/EUKARYOME/1.9.4/EU194_SSU.fasta.gz"
+
+  # EUKARYOME LSU database
+  eukaryome_lsu:
+    description: "EUKARYOME LSU (28S) rRNA reference database"
+    version: "1.9.4"
+    regions: ["LSU"]
+    paths:
+      blast:          "/data/EUKARYOME/1.9.4/EU194_LSU/EU194_LSU"
+      vsearch_global: "/data/EUKARYOME/1.9.4/EU194_LSU.udb"
+      vsearch_exact:  "/data/EUKARYOME/1.9.4/EU194_LSU.fasta.gz"
+
+  # EUKARYOME LONG database (near-full rRNA)
+  eukaryome_long:
+    description: "EUKARYOME near-full rRNA reference database"
+    version: "1.9.4"
+    regions: ["ALL"]
+    paths:
+      blast:          "/data/EUKARYOME/1.9.4/EU194_LON/EU194_LON"
+      vsearch_global: "/data/EUKARYOME/1.9.4/EU194_LON.udb"
+      vsearch_exact:  "/data/EUKARYOME/1.9.4/EU194_LON.fasta.gz"
