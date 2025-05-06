@@ -20,6 +20,7 @@ from app.models.models import (
 from app import database
 from app import db_storage
 from app.runner import run_annotation
+from app.routers.refdbs import get_refdb_path
 
 router = APIRouter()
 
@@ -38,6 +39,23 @@ async def create_job(job_request: JobRequest, background_tasks: BackgroundTasks)
             }
         })
     
+    # Resolve database path from the identifier
+    try:
+        resolved_db_path = get_refdb_path(
+            job_request.database, 
+            job_request.tool.value, 
+            job_request.algorithm
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={
+            "error": {
+                "code": 400,
+                "message": f"Error resolving reference database '{job_request.database}': {str(e)}"
+            }
+        })
+    
     # Generate a unique job ID
     job_id = str(uuid.uuid4())
     
@@ -47,7 +65,7 @@ async def create_job(job_request: JobRequest, background_tasks: BackgroundTasks)
         file_id=job_request.file_id,
         tool=job_request.tool.value,
         algorithm=job_request.algorithm,
-        database=job_request.database,
+        database=resolved_db_path,  # Store the resolved path
         parameters=job_request.parameters or {}
     )
     
