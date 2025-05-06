@@ -17,7 +17,7 @@ from app import database
 router = APIRouter()
 
 # Directory for storing uploaded files
-UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.getcwd(), "uploads"))
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.getcwd(), "wd/uploads"))
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Allowed file extensions

@@ -69,17 +69,17 @@ COPY run.py /app/
 
 ## Create non-root user and set permissions
 RUN groupadd -r fastapi && useradd -r -g fastapi fastapi \
-    && mkdir -p uploads outputs \
+    && mkdir -p wd/uploads wd/outputs \
     && chown -R fastapi:fastapi /app \
     && chmod -R 755 /app
 
 ## Set environment variables
-ENV UPLOAD_DIR=/app/uploads \
-    OUTPUT_DIR=/app/outputs \
+ENV UPLOAD_DIR=/app/wd/uploads \
+    OUTPUT_DIR=/app/wd/outputs \
     PYTHONUNBUFFERED=1 \
     MAX_CPUS=8 \
     MAX_CONCURRENT_JOBS=2 \
-    DISABLE_DOCS=true
+    DISABLE_DOCS=false
 
 ## Note about API_KEY:
 ## The `API_KEY` variable should be provided at runtime rather than hardcoded here
@@ -88,6 +88,9 @@ ENV UPLOAD_DIR=/app/uploads \
 
 ## Note about DISABLE_DOCS:
 ## If set to true, the API documentation (Swagger UI, ReDoc, and OpenAPI JSON schema) is disabled
+
+## It's possible to set a custom REFDB_CONFIG_PATH at runtime
+## REFDB_CONFIG_PATH=/app/app/config/refdb.yaml
 
 
 ## Switch to non-root user

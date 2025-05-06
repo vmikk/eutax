@@ -43,7 +43,7 @@ job_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS)
 
 # Default output directory
-OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "outputs"))
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "wd/outputs"))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Default reference database identifier

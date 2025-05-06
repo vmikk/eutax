@@ -12,10 +12,14 @@ from datetime import datetime
 from typing import List, Dict, Optional, Any
 
 # Path to the SQLite database
-DB_PATH = os.path.join(os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "outputs")), "job_summaries.db")
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "wd/outputs"))
+DB_PATH = os.path.join(OUTPUT_DIR, "job_summaries.db")
 
 def ensure_db_initialized():
     """Initialize the database if it doesn't exist"""
+    # Ensure the output directory exists
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    
     if not os.path.exists(DB_PATH):
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
