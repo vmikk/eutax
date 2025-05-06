@@ -18,6 +18,7 @@ from app.models.models import JobStatusEnum
 from app import database
 from app import db_storage
 from app.result_parsers import parse_blast_file_to_json, parse_vsearch_file_to_json
+from app.routers.refdbs import get_refdb_path
 
 # Configure logging with timestamp format
 logging.basicConfig(
@@ -45,9 +46,8 @@ thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_J
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "outputs"))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Default database paths
-DEFAULT_BLAST_DB = os.environ.get("BLAST_DB", "/mnt/Data/DB/EUKARYOME/EUKARYOME")
-DEFAULT_UDB_DB = os.environ.get("UDB_DB", "/mnt/Data/DB/EUKARYOME.udb")
+# Default reference database identifier
+DEFAULT_REFDB = "eukaryome_its"
 
 # Default parameters
 DEFAULT_BLAST_PARAMS = {
@@ -120,7 +120,7 @@ async def run_annotation(job_id: str):
                 file_id=file_id,
                 tool=tool,
                 algorithm=algorithm,
-                database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
+                database_path=db_path,
                 parameters=parameters,
                 status=JobStatusEnum.RUNNING,
                 created_at=job_data["created_at"],
@@ -137,7 +137,7 @@ async def run_annotation(job_id: str):
                     input_file, 
                     job_output_dir, 
                     algorithm, 
-                    db_path or DEFAULT_BLAST_DB, 
+                    db_path,
                     parameters
                 )
                 
@@ -164,7 +164,7 @@ async def run_annotation(job_id: str):
                     input_file, 
                     job_output_dir, 
                     algorithm,
-                    db_path or DEFAULT_UDB_DB, 
+                    db_path,
                     parameters
                 )
                 
@@ -212,7 +212,7 @@ async def run_annotation(job_id: str):
                 file_id=file_id,
                 tool=tool,
                 algorithm=algorithm,
-                database_path=db_path or (DEFAULT_BLAST_DB if tool.lower() == "blast" else DEFAULT_UDB_DB),
+                database_path=db_path,
                 parameters=parameters,
                 status=status,
                 created_at=job_data["created_at"],
