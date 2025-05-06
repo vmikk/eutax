@@ -12,7 +12,7 @@ import logging
 import logging.config
 import os
 
-from app.routers import uploads, jobs
+from app.routers import uploads, jobs, refdbs
 from app.auth import verify_api_key, API_KEY
 
 # Define custom logging configuration with timestamps
@@ -83,6 +83,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)
 # Create protected routers with API key authentication
 protected_uploads_router = uploads.router
 protected_jobs_router = jobs.router
+protected_refdbs_router = refdbs.router
 
 # Create router for unprotected endpoints
 from fastapi import APIRouter
@@ -101,6 +102,7 @@ async def get_job_count():
 # Include routers
 app.include_router(protected_uploads_router, prefix="/api/v1", tags=["Uploads"], dependencies=[Depends(verify_api_key)])
 app.include_router(protected_jobs_router, prefix="/api/v1", tags=["Jobs"], dependencies=[Depends(verify_api_key)])
+app.include_router(protected_refdbs_router, prefix="/api/v1", tags=["Reference Databases"], dependencies=[Depends(verify_api_key)])
 app.include_router(unprotected_router, prefix="/api/v1", tags=["Public"])
 
 class HealthResponse(BaseModel):
