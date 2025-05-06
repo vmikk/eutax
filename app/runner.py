@@ -13,12 +13,13 @@ import asyncio
 import concurrent.futures
 import multiprocessing
 import time
+import json
 from Bio import SeqIO
 from app.models.models import JobStatusEnum
 from app import database
 from app import db_storage
 from app.result_parsers import parse_blast_file_to_json, parse_vsearch_file_to_json
-from app.routers.refdbs import get_refdb_path
+from app.routers.refdbs import get_refdb_path, load_refdb_config
 
 # Configure logging with timestamp format
 logging.basicConfig(
@@ -63,6 +64,107 @@ DEFAULT_VSEARCH_PARAMS = {
     "maxhits": 20,
     "threads": 4
 }
+
+
+async def write_results_json(
+    job_id: str, 
+    tool: str, 
+    algorithm: str, 
+    db_path: str, 
+    raw_output_path: str,
+    job_output_dir: str,
+    input_file: str,
+    alignment_output: Optional[str] = None
+) -> str:
+    """
+    Process tool results and write to JSON file with added metadata.
+    
+    Args:
+        job_id: Job identifier
+        tool: Tool name (blast or vsearch)
+        algorithm: Algorithm used
+        db_path: Path to the database
+        raw_output_path: Path to raw output file
+        job_output_dir: Directory to write output
+        input_file: Path to input FASTA file
+        alignment_output: Path to alignment output (only for vsearch)
+        
+    Returns:
+        Path to the generated JSON results file
+    """
+    json_output_path = os.path.join(job_output_dir, "results.json")
+    
+    # Get database identifier and version from the path
+    refdb_config = load_refdb_config()
+    db_identifier = None
+    db_version = None
+    
+    # Find database identifier and version by matching the path
+    for db_id, db_info in refdb_config.items():
+        paths = db_info.get("paths", {})
+        for path_type, path in paths.items():
+            # Extract base path (without file extension)
+            db_base_path = path.split('.')[0] if '.' in path else path
+            db_path_base = db_path.split('.')[0] if '.' in db_path else db_path
+            
+            # Check if db_path contains the base path or vice versa
+            if db_path_base in db_base_path or db_base_path in db_path_base:
+                db_identifier = db_id
+                db_version = db_info.get("version")
+                break
+        if db_identifier:
+            break
+    
+    # Process results based on tool
+    if tool.lower() == "blast":
+        # Parse BLAST results
+        result_json = await asyncio.get_event_loop().run_in_executor(
+            thread_pool,
+            parse_blast_file_to_json,
+            raw_output_path, 
+            None,       # Don't write to file yet
+            input_file  # Pass the input FASTA file to correctly count queries
+        )
+        
+    elif tool.lower() == "vsearch":
+        # Parse VSEARCH results
+        result_json = await asyncio.get_event_loop().run_in_executor(
+            thread_pool,
+            parse_vsearch_file_to_json,
+            raw_output_path, 
+            alignment_output,
+            None,       # Don't write to file yet
+            input_file  # Pass the input FASTA file to correctly count queries
+        )
+    
+    # Load the results to add metadata
+    try:
+        results = json.loads(result_json)
+    except (json.JSONDecodeError, TypeError):
+        # If result_json is not a valid JSON string, it might be an error message or dict
+        if isinstance(result_json, dict):
+            results = result_json
+        else:
+            results = {"error": str(result_json)}
+    
+    # Add metadata
+    results["metadata"] = {
+        "tool": tool,
+        "algorithm": algorithm,
+        "database": {
+            "identifier": db_identifier or "unknown",
+            "version": db_version or "unknown"
+        },
+        "job_id": job_id
+    }
+    
+    # Write results to file
+    with open(json_output_path, 'w') as f:
+        json.dump(results, f, indent=2)
+    
+    logger.info(f"Parsed {tool.upper()} results with metadata saved to {json_output_path}")
+    
+    return json_output_path
 
 
 async def run_annotation(job_id: str):
@@ -141,16 +243,16 @@ async def run_annotation(job_id: str):
                     parameters
                 )
                 
-                # Parse the BLAST results and save as JSON (also in thread pool)
-                json_output_path = os.path.join(job_output_dir, "results.json")
-                await asyncio.get_event_loop().run_in_executor(
-                    thread_pool,
-                    parse_blast_file_to_json,
-                    output_path, 
-                    json_output_path,
-                    input_file  # Pass the input FASTA file to correctly count queries
+                # Parse the BLAST results and save as JSON with metadata
+                json_output_path = await write_results_json(
+                    job_id=job_id,
+                    tool=tool,
+                    algorithm=algorithm,
+                    db_path=db_path,
+                    raw_output_path=output_path,
+                    job_output_dir=job_output_dir,
+                    input_file=input_file
                 )
-                logger.info(f"Parsed BLAST results saved to {json_output_path}")
                 
                 # Add the JSON output path to the job data
                 result_files = {
@@ -168,17 +270,17 @@ async def run_annotation(job_id: str):
                     parameters
                 )
                 
-                # Parse the VSEARCH results and save as JSON (using thread pool)
-                json_output_path = os.path.join(job_output_dir, "results.json")
-                await asyncio.get_event_loop().run_in_executor(
-                    thread_pool,
-                    parse_vsearch_file_to_json,
-                    output_path, 
-                    alignment_output,
-                    json_output_path,
-                    input_file  # Pass the input FASTA file to correctly count queries
+                # Parse the VSEARCH results and save as JSON with metadata
+                json_output_path = await write_results_json(
+                    job_id=job_id,
+                    tool=tool,
+                    algorithm=algorithm,
+                    db_path=db_path,
+                    raw_output_path=output_path,
+                    job_output_dir=job_output_dir,
+                    input_file=input_file,
+                    alignment_output=alignment_output
                 )
-                logger.info(f"Parsed VSEARCH results saved to {json_output_path}")
                 
                 # Add the JSON output path to the job data
                 result_files = {
