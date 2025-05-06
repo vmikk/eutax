@@ -44,7 +44,7 @@ class JobRequest(BaseModel):
     file_id: str = Field(..., description="Identifier for the uploaded sequence")
     tool: ToolEnum = Field(..., description="Tool to use (blast, vsearch)")
     algorithm: AlgorithmEnum = Field(..., description="Algorithm variant for the selected tool (blastn, megablast for BLAST; usearch_global, search_exact for VSEARCH)")
-    database: str = Field(..., description="Database path or identifier")
+    database: str = Field(..., description="Reference database identifier (e.g., 'eukaryome_its')")
     parameters: Optional[Dict[str, Union[str, int, float]]] = Field(
         {}, description="Additional tool-specific parameters"
     )
@@ -59,41 +59,16 @@ class JobRequest(BaseModel):
         return v
     
     @validator('database')
-    def validate_database_path(cls, v, values):
-        # Normalize path to handle any path traversal attempts
-        normalized_path = os.path.normpath(v)
+    def validate_database_identifier(cls, v, values):
+        # Only allow alphanumeric characters, underscore, and dash in database identifiers
+        if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
+            raise ValueError("Database identifier can only contain alphanumeric characters, underscore, and dash")
         
-        # Check for path traversal patterns after normalization
-        if '..' in normalized_path:
-            raise ValueError("Path traversal detected in database path")
-            
-        # # TODO - Validate against allowed directories
-        # if normalized_path.startswith('/'):
-        #     allowed_db_dirs = [
-        #         '/data/Eukaryome',
-        #         '/data/DB'
-        #     ]
-        #     
-        #     # Check if the path is within any allowed directory
-        #     if not any(normalized_path.startswith(allowed_dir) for allowed_dir in allowed_db_dirs):
-        #         raise ValueError(f"Database path must be within allowed directories: {', '.join(allowed_db_dirs)}")
+        # If the value contains slashes or dots, it's likely a file path which is not allowed
+        if '/' in v or '\\' in v or '.' in v:
+            raise ValueError("Custom database paths are not allowed. Use a predefined reference database identifier")
         
-        # Additional security: Only allow alphanumeric, underscore, dash, dot, and slashes
-        if not re.match(r'^[a-zA-Z0-9_\-./]+$', normalized_path):
-            raise ValueError("Database path contains invalid characters")
-        
-        # Validate file format based on tool and algorithm
-        if 'tool' in values and values['tool'] == ToolEnum.VSEARCH:
-            if 'algorithm' in values:
-                if values['algorithm'] == AlgorithmEnum.USEARCH_GLOBAL:
-                    if not normalized_path.endswith('.udb'):
-                        raise ValueError("For VSEARCH with usearch_global algorithm, database must be in UDB format (*.udb)")
-                elif values['algorithm'] == AlgorithmEnum.SEARCH_EXACT:
-                    fasta_extensions = ['.fa', '.fasta', '.fa.gz', '.fasta.gz']
-                    if not any(normalized_path.endswith(ext) for ext in fasta_extensions):
-                        raise ValueError("For VSEARCH with search_exact algorithm, database must be in FASTA format (*.fa, *.fasta, *.fa.gz, *.fasta.gz)")
-            
-        return normalized_path
+        return v
     
     @validator('parameters')
     def sanitize_parameters(cls, v):

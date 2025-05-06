@@ -71,7 +71,7 @@ def get_refdb_path(refdb_id: str, tool: str, algorithm: str = None):
         elif algorithm == "search_exact":
             path_key = "vsearch_exact"
         else:
-            path_key = "vsearch_global"  # Default
+            path_key = "vsearch_global"  # Default for VSEARCH
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported tool: {tool}")
     
