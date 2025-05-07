@@ -7,7 +7,7 @@ FROM python:3.12.10-slim AS builder
 RUN apt-get update \
   && apt-get install -y less wget curl \
   && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* /var/cache/debconf/templates.dat* /tmp/* /var/tmp/*
 
 ## Install BLAST
 RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
@@ -31,20 +31,22 @@ RUN wget https://github.com/gokcehan/lf/releases/download/r34/lf-linux-amd64.tar
 
 ## Install Rust (needed for pydantic-core)
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal \
-  && echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+  && echo 'source $HOME/.cargo/env' >> $HOME/.bashrc \
+  && rm -rf /root/.cargo/registry /root/.cargo/git
 
-ENV PATH="/root/.cargo/bin:${PATH}"
+ENV PATH="/root/.cargo/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 ## Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-## Remove unnecessary cache and files to reduce layer size
-RUN pip cache purge \
-    && find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip cache purge \
     && find /usr/local -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true
-
+    && find /usr/local -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true \
+    && find /usr/local/lib/python3.12/site-packages/pip/_vendor/distlib -name "*-arm.exe" -delete
+    # && find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
+    # && find /usr/local/lib/python3.12/site-packages -name "*.pyc" -delete
 
 
 ### --- Runtime stage ---
@@ -54,7 +56,7 @@ FROM python:3.12.10-slim AS runtime
 RUN apt-get update \
   && apt-get install -y less wget curl libgomp1 \
   && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* /var/cache/debconf/templates.dat* /tmp/* /var/tmp/*
 
 ## Set working directory
 WORKDIR /app
@@ -74,9 +76,9 @@ RUN groupadd -r fastapi && useradd -r -g fastapi fastapi \
     && chmod -R 755 /app
 
 ## Set environment variables
-ENV UPLOAD_DIR=/app/wd/uploads \
+ENV PYTHONUNBUFFERED=1 \
+    UPLOAD_DIR=/app/wd/uploads \
     OUTPUT_DIR=/app/wd/outputs \
-    PYTHONUNBUFFERED=1 \
     MAX_CPUS=8 \
     MAX_CONCURRENT_JOBS=2 \
     DISABLE_DOCS=false
