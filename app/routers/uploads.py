@@ -6,13 +6,14 @@ including validation, storage, and file ID management.
 import os
 import shutil
 import uuid
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 from typing import Optional
 import tempfile
 
 from app.models.models import SequenceUploadResponse
 from app import database
+from app.limiter import limiter, rate_limits
 
 router = APIRouter()
 
@@ -40,7 +41,8 @@ def is_valid_fasta(filepath: str) -> bool:
 
 
 @router.post("/upload", response_model=SequenceUploadResponse, status_code=201)
-async def upload_fasta(file: UploadFile = File(...)):
+@limiter.limit(rate_limits.get("upload_fasta", "1000/minute"))
+async def upload_fasta(request: Request, file: UploadFile = File(...)):
     """
     Upload a FASTA file containing DNA sequences.
     Returns a unique file_id that can be used to reference the file in job creation.
