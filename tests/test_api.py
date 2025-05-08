@@ -71,3 +71,40 @@ class APITester:
             self.print_failure(f"Health check request failed: {str(e)}")
             return False
 
+    def test_upload(self, file_path: str) -> Optional[str]:
+        """Test file upload endpoint"""
+        self.print_header(f"Testing File Upload: {os.path.basename(file_path)}")
+        
+        if not os.path.exists(file_path):
+            self.print_failure(f"File not found: {file_path}")
+            return None
+            
+        try:
+            with open(file_path, "rb") as file:
+                files = {"file": (os.path.basename(file_path), file)}
+                response = requests.post(
+                    f"{self.base_url}/api/v1/upload",
+                    headers=self.headers,
+                    files=files
+                )
+                
+                if response.status_code == 201:
+                    upload_data = response.json()
+                    file_id = upload_data.get("file_id")
+                    upload_status = upload_data.get("upload_status")
+                    
+                    if file_id and upload_status == "success":
+                        self.print_success(f"Upload successful - File ID: {file_id}")
+                        self.print_info(f"Response:\n{upload_data}")
+                        return file_id
+                    else:
+                        self.print_failure(f"Upload response invalid - Status: {upload_status}")
+                        return None
+                else:
+                    self.print_failure(f"Upload failed with status code: {response.status_code}")
+                    self.print_info(f"Response: {response.text}")
+                    return None
+        except Exception as e:
+            self.print_failure(f"Upload request failed: {str(e)}")
+            return None
+
