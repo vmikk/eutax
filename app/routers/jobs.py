@@ -5,7 +5,7 @@ annotation jobs, including background task handling.
 
 import uuid
 import os
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Request, Response
 from fastapi.responses import JSONResponse, FileResponse
 from typing import Optional, List, Dict, Any
 
@@ -28,7 +28,7 @@ router = APIRouter()
 
 @router.post("/jobs", response_model=JobResponse, status_code=202)
 @limiter.limit(rate_limits.get("create_job", "1000/minute"))
-async def create_job(request: Request, job_request: JobRequest, background_tasks: BackgroundTasks):
+async def create_job(request: Request, response: Response, job_request: JobRequest, background_tasks: BackgroundTasks):
     """
     Create a new taxonomic annotation job.
     """
@@ -83,7 +83,7 @@ async def create_job(request: Request, job_request: JobRequest, background_tasks
 
 @router.get("/jobs/{job_id}/status", response_model=JobStatusResponse)
 @limiter.limit(rate_limits.get("get_job_status", "1000/minute"))
-async def get_job_status(request: Request, job_id: str):
+async def get_job_status(request: Request, response: Response, job_id: str):
     """
     Get the status of a job.
     """
@@ -107,7 +107,7 @@ async def get_job_status(request: Request, job_id: str):
 
 @router.get("/jobs/{job_id}/results/json")
 @limiter.limit(rate_limits.get("get_job_results_json", "1000/minute"))
-async def get_job_results_json(request: Request, job_id: str):
+async def get_job_results_json(request: Request, response: Response, job_id: str):
     """
     Download the job results in JSON format.
     Returns the results.json file created during job processing.
@@ -158,7 +158,7 @@ async def get_job_results_json(request: Request, job_id: str):
 
 @router.get("/jobs", response_model=JobListResponse)
 @limiter.limit(rate_limits.get("list_jobs", "1000/minute"))
-async def list_jobs(request: Request,
+async def list_jobs(request: Request, response: Response,
     status: Optional[str] = Query(None, description="Filter jobs by status: queued, running, finished, failed"),
     limit: int = Query(10, ge=1, le=100, description="Number of jobs to return"),
     offset: int = Query(0, ge=0, description="Starting position for pagination")
@@ -189,7 +189,7 @@ async def list_jobs(request: Request,
 
 @router.get("/jobs/summaries", response_model=List[Dict[str, Any]])
 @limiter.limit(rate_limits.get("get_job_summaries", "1000/minute"))
-async def get_job_summaries(request: Request,
+async def get_job_summaries(request: Request, response: Response,
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of job summaries to return"),
     offset: int = Query(0, ge=0, description="Starting position for pagination")
 ):
@@ -203,7 +203,7 @@ async def get_job_summaries(request: Request,
 
 @router.get("/jobs/{job_id}/summary", response_model=Dict[str, Any])
 @limiter.limit(rate_limits.get("get_job_summary", "1000/minute"))
-async def get_job_summary(request: Request, job_id: str):
+async def get_job_summary(request: Request, response: Response, job_id: str):
     """
     Get a detailed summary for a specific job from the persistent SQLite database.
     Includes sequence information, CPU metrics, and other job details.

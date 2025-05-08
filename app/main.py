@@ -17,6 +17,7 @@ from app.auth import verify_api_key, API_KEY
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
 from app.limiter import limiter
+from slowapi.errors import RateLimitExceeded
 
 # Define custom logging configuration with timestamps
 log_config = {
@@ -111,7 +112,7 @@ app.include_router(unprotected_router, prefix="/api/v1", tags=["Public"])
 # Integrate slowapi rate limiting
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
-app.add_exception_handler(429, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 class HealthResponse(BaseModel):
     status: str
