@@ -1,0 +1,13 @@
+
+## EUTAX configuration file
+
+# API endpoint rate limits
+rate_limits: {
+  "create_job":              "1000/minute",
+  "get_job_status":          "1000/minute",
+  "get_job_results_json":    "1000/minute",
+  "list_jobs":               "1000/minute",
+  "get_job_summaries":       "1000/minute",
+  "get_job_summary":         "1000/minute",
+  "get_reference_databases": "1000/minute",
+}
