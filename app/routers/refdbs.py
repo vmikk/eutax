@@ -3,12 +3,13 @@ Reference database configuration endpoints for the EUTAX API.
 Provides information about available reference databases for taxonomic annotation.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import yaml
 import os
 import logging
+from app.limiter import limiter, rate_limits
 
 # Configuration
 REFDB_CONFIG_PATH = os.getenv("REFDB_CONFIG_PATH", "/app/app/config/refdb.yaml")
@@ -85,7 +86,8 @@ def get_refdb_path(refdb_id: str, tool: str, algorithm: str = None):
     return paths[path_key]
 
 @router.get("/refdbs", response_model=RefDbsResponse, tags=["Reference Databases"])
-async def get_reference_databases():
+@limiter.limit(rate_limits.get("get_reference_databases", "1000/minute"))
+async def get_reference_databases(request: Request):
     """
     List available reference databases for taxonomic annotation.
     
