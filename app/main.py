@@ -14,6 +14,9 @@ import os
 
 from app.routers import uploads, jobs, refdbs
 from app.auth import verify_api_key, API_KEY
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
+from app.limiter import limiter
 
 # Define custom logging configuration with timestamps
 log_config = {
@@ -104,6 +107,11 @@ app.include_router(protected_uploads_router, prefix="/api/v1", tags=["Uploads"],
 app.include_router(protected_jobs_router, prefix="/api/v1", tags=["Jobs"], dependencies=[Depends(verify_api_key)])
 app.include_router(protected_refdbs_router, prefix="/api/v1", tags=["Reference Databases"], dependencies=[Depends(verify_api_key)])
 app.include_router(unprotected_router, prefix="/api/v1", tags=["Public"])
+
+# Integrate slowapi rate limiting
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+app.add_exception_handler(429, _rate_limit_exceeded_handler)
 
 class HealthResponse(BaseModel):
     status: str
