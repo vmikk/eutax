@@ -108,3 +108,44 @@ class APITester:
             self.print_failure(f"Upload request failed: {str(e)}")
             return None
 
+    def test_create_job(self, file_id: str, tool: str, algorithm: str, database: str, 
+                        max_target_seqs: int = 20, num_threads: int = 2) -> Optional[str]:
+        """Test job creation endpoint"""
+        self.print_header(f"Creating Job: {tool}/{algorithm} against {database}")
+        
+        payload = {
+            "file_id": file_id,
+            "tool": tool,
+            "algorithm": algorithm,
+            "database": database,
+            "parameters": {
+                "max_target_seqs": max_target_seqs,
+                "num_threads": num_threads
+            }
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/v1/jobs",
+                headers={**self.headers, "Content-Type": "application/json"},
+                json=payload
+            )
+            
+            if response.status_code == 202:
+                job_data = response.json()
+                job_id = job_data.get("job_id")
+                if job_id:
+                    self.print_success(f"Job queued successfully - Job ID: {job_id}")
+                    self.print_info(f"Response:\n{job_data}")
+                    return job_id
+                else:
+                    self.print_failure("Job creation response missing job_id")
+                    return None
+            else:
+                self.print_failure(f"Job creation failed with status code: {response.status_code}")
+                self.print_info(f"Response: {response.text}")
+                return None
+        except Exception as e:
+            self.print_failure(f"Job creation request failed: {str(e)}")
+            return None
+
