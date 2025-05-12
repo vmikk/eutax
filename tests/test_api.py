@@ -149,3 +149,84 @@ class APITester:
             self.print_failure(f"Job creation request failed: {str(e)}")
             return None
 
+    def test_job_status(self, job_id: str, wait_for_completion: bool = True) -> Optional[str]:
+        """Test job status endpoint and optionally wait for job completion"""
+        self.print_header(f"Checking Job Status: {job_id}")
+        
+        if wait_for_completion:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]Waiting for job completion..."),
+                TimeElapsedColumn(),
+                console=self.console
+            ) as progress:
+                task = progress.add_task("Waiting", total=None)
+                
+                while True:
+                    try:
+                        response = requests.get(
+                            f"{self.base_url}/api/v1/jobs/{job_id}/status",
+                            headers=self.headers
+                        )
+                        
+                        if response.status_code == 200:
+                            status_data = response.json()
+                            status = status_data.get("status", "unknown")
+                            
+                            if status in ["finished", "failed"]:
+                                progress.update(task, completed=True)
+                                break
+                                
+                            time.sleep(2)
+                        else:
+                            progress.update(task, completed=True)
+                            self.print_failure(f"Job status check failed with status code: {response.status_code}")
+                            return None
+                    except Exception as e:
+                        progress.update(task, completed=True)
+                        self.print_failure(f"Job status request failed: {str(e)}")
+                        return None
+        else:
+            try:
+                response = requests.get(
+                    f"{self.base_url}/api/v1/jobs/{job_id}/status",
+                    headers=self.headers
+                )
+                
+                if response.status_code != 200:
+                    self.print_failure(f"Job status check failed with status code: {response.status_code}")
+                    return None
+            except Exception as e:
+                self.print_failure(f"Job status request failed: {str(e)}")
+                return None
+        
+        # Get final status
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/v1/jobs/{job_id}/status",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                status_data = response.json()
+                status = status_data.get("status", "unknown")
+                self.print_success(f"Job status: {status}")
+                
+                # Create a rich table for detailed status
+                table = Table(title="Job Status Details")
+                table.add_column("Property", style="cyan")
+                table.add_column("Value", style="green")
+                
+                for key, value in status_data.items():
+                    if isinstance(value, str) and key != "job_id":
+                        table.add_row(key, value)
+                
+                self.console.print(table)
+                return status
+            else:
+                self.print_failure(f"Final job status check failed with status code: {response.status_code}")
+                return None
+        except Exception as e:
+            self.print_failure(f"Final job status request failed: {str(e)}")
+            return None
+
