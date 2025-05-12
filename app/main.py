@@ -18,6 +18,14 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
 from app.limiter import limiter
 from slowapi.errors import RateLimitExceeded
+from app.config.config import load_config
+from app.logging_config import get_access_formatter
+
+# Load EUTAX configuration
+config = load_config()
+logging_cfg = config.get("logging", {})
+log_datefmt = logging_cfg.get("datefmt", "%Y-%m-%d %H:%M:%S")
+log_timezone = logging_cfg.get("timezone", None)
 
 # Define custom logging configuration with timestamps
 log_config = {
@@ -25,9 +33,10 @@ log_config = {
     "disable_existing_loggers": False,
     "formatters": {
         "access": {
-            "()": "uvicorn.logging.AccessFormatter",
+            "()": "app.logging_config.get_access_formatter",
             "fmt": '%(levelprefix)s %(asctime)s :: %(client_addr)s - "%(request_line)s" %(status_code)s',
-            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "datefmt": log_datefmt,
+            "tz": log_timezone,
             "use_colors": True
         },
     },
