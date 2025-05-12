@@ -1,7 +1,16 @@
 
 ## EUTAX configuration file
 
-# API endpoint rate limits
+## API endpoint rate limits
+# If a request exceeds the rate limit, a `429` http error will be raised
+# Limit examples:
+#   2/second
+#   5/minute
+#   10/hour
+#   100/day
+#   500/7days
+#   2000/year
+#   10/hour;100/day;2000/year
 rate_limits: {
   "create_job":              "1000/minute",
   "get_job_status":          "1000/minute",
