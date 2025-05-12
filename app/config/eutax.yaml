@@ -20,3 +20,8 @@ rate_limits: {
   "get_job_summary":         "1000/minute",
   "get_reference_databases": "1000/minute",
 }
+
+## Logging configuration
+logging:
+  datefmt: "%Y-%m-%d %H:%M:%S"
+  timezone: "Europe/Tallinn"
