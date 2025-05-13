@@ -22,6 +22,10 @@ from app import db_storage
 from app.runner import run_annotation
 from app.routers.refdbs import get_refdb_path
 from app.limiter import limiter, rate_limits
+from app.logging_config import get_logger
+
+# Create logger
+logger = get_logger("eutax.job_api")
 
 router = APIRouter()
 
@@ -32,8 +36,29 @@ async def create_job(request: Request, response: Response, job_request: JobReque
     """
     Create a new taxonomic annotation job.
     """
+    request_id = request.headers.get("X-Request-ID", None)
+    client_ip = request.client.host
+    
+    job_logger = get_logger("eutax.job_api", 
+                           request_id=request_id, 
+                           client_ip=client_ip,
+                           file_id=job_request.file_id)
+    
+    job_logger.info(
+        f"Job creation requested",
+        event_type="job_creation_requested",
+        tool=job_request.tool.value,
+        algorithm=job_request.algorithm,
+        database=job_request.database
+    )
+    
     # Validate file_id exists
     if not database.get_upload(job_request.file_id):
+        job_logger.warning(
+            f"Job creation failed: File ID '{job_request.file_id}' not found",
+            event_type="job_creation_failed",
+            error="file_not_found"
+        )
         raise HTTPException(status_code=404, detail={
             "error": {
                 "code": 404,
@@ -48,9 +73,27 @@ async def create_job(request: Request, response: Response, job_request: JobReque
             job_request.tool.value, 
             job_request.algorithm
         )
+        
+        job_logger.info(
+            f"Database path resolved: {resolved_db_path}",
+            event_type="job_db_resolved",
+            database_id=job_request.database,
+            resolved_path=resolved_db_path
+        )
     except HTTPException as e:
+        job_logger.warning(
+            f"Job creation failed: Database '{job_request.database}' not found",
+            event_type="job_creation_failed",
+            error="database_not_found"
+        )
         raise e
     except Exception as e:
+        job_logger.error(
+            f"Job creation failed: Error resolving database '{job_request.database}'",
+            event_type="job_creation_failed",
+            error="database_resolve_error",
+            error_details=str(e)
+        )
         raise HTTPException(status_code=400, detail={
             "error": {
                 "code": 400,
@@ -60,6 +103,7 @@ async def create_job(request: Request, response: Response, job_request: JobReque
     
     # Generate a unique job ID
     job_id = str(uuid.uuid4())
+    job_logger = job_logger.bind(job_id=job_id)
     
     # Store job in database
     database.save_job(
@@ -68,6 +112,12 @@ async def create_job(request: Request, response: Response, job_request: JobReque
         tool=job_request.tool.value,
         algorithm=job_request.algorithm,
         database=resolved_db_path,  # Store the resolved path
+        parameters=job_request.parameters or {}
+    )
+    
+    job_logger.info(
+        f"Job created and queued",
+        event_type="job_created",
         parameters=job_request.parameters or {}
     )
     
@@ -87,14 +137,38 @@ async def get_job_status(request: Request, response: Response, job_id: str):
     """
     Get the status of a job.
     """
+    request_id = request.headers.get("X-Request-ID", None)
+    client_ip = request.client.host
+    
+    job_logger = get_logger("eutax.job_api", 
+                           request_id=request_id, 
+                           client_ip=client_ip,
+                           job_id=job_id)
+    
+    job_logger.debug(
+        f"Job status requested: {job_id}",
+        event_type="job_status_requested"
+    )
+    
     job_data = database.get_job(job_id)
     if not job_data:
+        job_logger.warning(
+            f"Job status request failed: Job ID '{job_id}' not found",
+            event_type="job_status_failed",
+            error="job_not_found"
+        )
         raise HTTPException(status_code=404, detail={
             "error": {
                 "code": 404,
                 "message": f"Job ID '{job_id}' not found."
             }
         })
+    
+    job_logger.debug(
+        f"Job status returned: {job_data['status']}",
+        event_type="job_status_returned",
+        status=job_data["status"]
+    )
     
     return JobStatusResponse(
         job_id=job_id,
@@ -112,8 +186,27 @@ async def get_job_results_json(request: Request, response: Response, job_id: str
     Download the job results in JSON format.
     Returns the results.json file created during job processing.
     """
+    request_id = request.headers.get("X-Request-ID", None)
+    client_ip = request.client.host
+    
+    job_logger = get_logger("eutax.job_api", 
+                           request_id=request_id, 
+                           client_ip=client_ip,
+                           job_id=job_id)
+    
+    job_logger.info(
+        f"Job results requested: {job_id}",
+        event_type="job_results_requested",
+        format="json"
+    )
+    
     job_data = database.get_job(job_id)
     if not job_data:
+        job_logger.warning(
+            f"Job results request failed: Job ID '{job_id}' not found",
+            event_type="job_results_failed",
+            error="job_not_found"
+        )
         raise HTTPException(status_code=404, detail={
             "error": {
                 "code": 404,
@@ -123,6 +216,12 @@ async def get_job_results_json(request: Request, response: Response, job_id: str
     
     # Check job status
     if job_data["status"] != JobStatusEnum.FINISHED:
+        job_logger.warning(
+            f"Job results request failed: Job is not finished",
+            event_type="job_results_failed",
+            error="job_not_finished",
+            current_status=job_data["status"]
+        )
         raise HTTPException(status_code=400, detail={
             "error": {
                 "code": 400,
@@ -132,6 +231,11 @@ async def get_job_results_json(request: Request, response: Response, job_id: str
     
     # Check if JSON results exist
     if not job_data.get("result_files") or "json" not in job_data["result_files"]:
+        job_logger.warning(
+            f"Job results request failed: JSON results not available",
+            event_type="job_results_failed",
+            error="results_not_available"
+        )
         raise HTTPException(status_code=404, detail={
             "error": {
                 "code": 404,
@@ -141,12 +245,28 @@ async def get_job_results_json(request: Request, response: Response, job_id: str
     
     json_path = job_data["result_files"]["json"]
     if not os.path.exists(json_path):
+        job_logger.error(
+            f"Job results request failed: JSON file not found",
+            event_type="job_results_failed",
+            error="results_file_missing",
+            expected_path=json_path
+        )
         raise HTTPException(status_code=404, detail={
             "error": {
                 "code": 404,
                 "message": "JSON results file not found"
             }
         })
+    
+    # Get file size for logging
+    file_size = os.path.getsize(json_path) if os.path.exists(json_path) else 0
+    
+    job_logger.info(
+        f"Serving job results file",
+        event_type="job_results_served",
+        file_path=json_path,
+        file_size=file_size
+    )
     
     # Return the file as a download
     return FileResponse(
@@ -166,8 +286,29 @@ async def list_jobs(request: Request, response: Response,
     """
     List all jobs with optional filtering by status.
     """
+    request_id = request.headers.get("X-Request-ID", None)
+    client_ip = request.client.host
+    
+    job_logger = get_logger("eutax.job_api", 
+                           request_id=request_id, 
+                           client_ip=client_ip)
+    
+    job_logger.debug(
+        f"Listing jobs",
+        event_type="jobs_list_requested",
+        status_filter=status,
+        limit=limit,
+        offset=offset
+    )
+    
     # Validate status parameter if provided
     if status and status not in [s.value for s in JobStatusEnum]:
+        job_logger.warning(
+            f"List jobs request failed: Invalid status value",
+            event_type="jobs_list_failed",
+            error="invalid_status",
+            invalid_status=status
+        )
         raise HTTPException(status_code=400, detail={
             "error": {
                 "code": 400,
@@ -176,6 +317,13 @@ async def list_jobs(request: Request, response: Response,
         })
     
     jobs_list, total = database.list_jobs(status, limit, offset)
+    
+    job_logger.debug(
+        f"Jobs list returned",
+        event_type="jobs_list_returned",
+        count=len(jobs_list),
+        total=total
+    )
     
     return JobListResponse(
         jobs=jobs_list,
@@ -197,7 +345,28 @@ async def get_job_summaries(request: Request, response: Response,
     Get detailed summaries of all jobs from the persistent SQLite database.
     Includes sequence counts, lengths, CPU metrics, and other job information.
     """
+    request_id = request.headers.get("X-Request-ID", None)
+    client_ip = request.client.host
+    
+    job_logger = get_logger("eutax.job_api", 
+                           request_id=request_id, 
+                           client_ip=client_ip)
+    
+    job_logger.debug(
+        f"Job summaries requested",
+        event_type="job_summaries_requested",
+        limit=limit,
+        offset=offset
+    )
+    
     summaries = await db_storage.get_job_summaries(limit, offset)
+    
+    job_logger.debug(
+        f"Job summaries returned",
+        event_type="job_summaries_returned",
+        count=len(summaries)
+    )
+    
     return summaries
 
 
@@ -205,17 +374,40 @@ async def get_job_summaries(request: Request, response: Response,
 @limiter.limit(rate_limits.get("get_job_summary", "1000/minute"))
 async def get_job_summary(request: Request, response: Response, job_id: str):
     """
-    Get a detailed summary for a specific job from the persistent SQLite database.
-    Includes sequence information, CPU metrics, and other job details.
+    Get detailed summary of a specific job from the persistent SQLite database.
+    Includes sequence counts, lengths, CPU metrics, and other job information.
     """
-    summary = await db_storage.get_job_by_id(job_id)
+    request_id = request.headers.get("X-Request-ID", None)
+    client_ip = request.client.host
+    
+    job_logger = get_logger("eutax.job_api", 
+                           request_id=request_id, 
+                           client_ip=client_ip,
+                           job_id=job_id)
+    
+    job_logger.debug(
+        f"Job summary requested: {job_id}",
+        event_type="job_summary_requested"
+    )
+    
+    summary = await db_storage.get_job_summary(job_id)
     
     if not summary:
+        job_logger.warning(
+            f"Job summary request failed: Job ID '{job_id}' not found",
+            event_type="job_summary_failed",
+            error="job_not_found"
+        )
         raise HTTPException(status_code=404, detail={
             "error": {
                 "code": 404,
-                "message": f"Job ID '{job_id}' not found in the persistent database."
+                "message": f"Job ID '{job_id}' not found or has no summary information."
             }
         })
+    
+    job_logger.debug(
+        f"Job summary returned: {job_id}",
+        event_type="job_summary_returned"
+    )
     
     return summary
