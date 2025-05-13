@@ -8,8 +8,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from typing import Dict
-import logging
-import logging.config
 import os
 
 from app.routers import uploads, jobs, refdbs
@@ -18,47 +16,16 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
 from app.limiter import limiter
 from slowapi.errors import RateLimitExceeded
-from app.config.config import load_config
-from app.logging_config import get_access_formatter
+from app.logging_config import setup_logging, get_logger
+setup_logging()
 
-# Load EUTAX configuration
-config = load_config()
-logging_cfg = config.get("logging", {})
-log_datefmt = logging_cfg.get("datefmt", "%Y-%m-%d %H:%M:%S")
-log_timezone = logging_cfg.get("timezone", None)
+import structlog
+import uuid
+from fastapi import Request, Response
+import time
 
-# Define custom logging configuration with timestamps
-log_config = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "access": {
-            "()": "app.logging_config.get_access_formatter",
-            "fmt": '%(levelprefix)s %(asctime)s :: %(client_addr)s - "%(request_line)s" %(status_code)s',
-            "datefmt": log_datefmt,
-            "tz": log_timezone,
-            "use_colors": True
-        },
-    },
-    "handlers": {
-        "access": {
-            "formatter": "access",
-            "class": "logging.StreamHandler",
-            "stream": "ext://sys.stdout",
-        },
-    },
-    "loggers": {
-        "uvicorn.access": {
-            "handlers": ["access"],
-            "level": "INFO",
-            "propagate": False
-        },
-    },
-}
-
-# Configure logging
-logging.config.dictConfig(log_config)
-logger = logging.getLogger("eutax")
+# root structlog logger
+logger = get_logger("eutax.system")
 
 # ANSI escape codes for colored output
 class Colors:
@@ -80,6 +47,70 @@ app = FastAPI(
     redoc_url=None if DISABLE_DOCS else "/redoc",
     openapi_url=None if DISABLE_DOCS else "/openapi.json",
 )
+
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    """
+    Middleware to add request logging and context tracking
+    """
+    # Generate a request ID
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    
+    # Create a request-specific logger with context
+    request_logger = get_logger(
+        "eutax.requests", 
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        client_ip=request.client.host,
+        query_params=str(request.query_params) if request.query_params else None
+    )
+
+    # Log the start of the request
+    request_logger.info(
+        f"Request started: {request.method} {request.url.path}",
+        event_type="request_started"
+    )
+    
+    # Record the start time
+    start_time = time.time()
+    
+    # Process the request, catching any exceptions
+    try:
+        response = await call_next(request)
+        
+        # Calculate request processing time
+        process_time = time.time() - start_time
+        
+        # Add the request ID to the response headers
+        response.headers["X-Request-ID"] = request_id
+        
+        # Log the response
+        request_logger.info(
+            f"Request completed: {request.method} {request.url.path}",
+            event_type="request_completed",
+            status_code=response.status_code,
+            duration_ms=round(process_time * 1000, 2)
+        )
+        
+        return response
+        
+    except Exception as e:
+        # Calculate request processing time
+        process_time = time.time() - start_time
+        
+        # Log the exception
+        request_logger.error(
+            f"Request failed: {request.method} {request.url.path}",
+            event_type="request_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+            duration_ms=round(process_time * 1000, 2),
+            exc_info=True
+        )
+        
+        # Re-raise the exception to let FastAPI handle it
+        raise
 
 # Add CORS middleware
 app.add_middleware(
@@ -162,13 +193,38 @@ async def startup_event():
         
         print(f"{Colors.GREEN}API KEY IS SET - Protected endpoints require authentication{Colors.RESET}")
         print(f"{Colors.BLUE}API key loaded from: {api_key_source}{Colors.RESET}")
+        
+        # Log using structured logger
+        logger.info(
+            "API started with authentication enabled",
+            event_type="api_startup",
+            auth_enabled=True,
+            auth_source=api_key_source
+        )
     else:
         print(f"{Colors.RED}WARNING: API KEY IS NOT SET - ALL ENDPOINTS ARE UNPROTECTED!{Colors.RESET}")
-        print(f"{Colors.RED}To enable authentication, set the API_KEY environment variable or use Docker secrets{Colors.RESET}") 
+        print(f"{Colors.RED}To enable authentication, set the API_KEY environment variable or use Docker secrets{Colors.RESET}")
+        
+        # Log using structured logger
+        logger.warning(
+            "API started without authentication",
+            event_type="api_startup",
+            auth_enabled=False
+        )
 
     # Log documentation status
     if DISABLE_DOCS:
         print(f"{Colors.YELLOW}API documentation (Swagger UI, ReDoc) is DISABLED{Colors.RESET}")
+        logger.info("API documentation is disabled", event_type="api_startup", docs_enabled=False)
     else:
         print(f"{Colors.BLUE}API documentation is ENABLED - available at /docs and /redoc{Colors.RESET}")
+        logger.info("API documentation is enabled", event_type="api_startup", docs_enabled=True)
+        
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Log API shutdown
+    """
+    logger.info("API shutting down", event_type="api_shutdown")
+
 
