@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 from typing import Dict, List, Optional, Tuple
 import uuid
-import logging
 import asyncio
 import concurrent.futures
 import multiprocessing
@@ -20,18 +19,16 @@ from app import database
 from app import db_storage
 from app.result_parsers import parse_blast_file_to_json, parse_vsearch_file_to_json
 from app.routers.refdbs import get_refdb_path, load_refdb_config
+from app.logging_config import get_logger
 
-# Configure logging with timestamp format
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+# Initialize logger
+logger = get_logger("eutax.jobs")
 
 # Determine total available CPUs and create resource management
 TOTAL_CPUS = int(os.environ.get("MAX_CPUS", multiprocessing.cpu_count()))
-logger.info(f"System has {TOTAL_CPUS} available CPUs")
+logger.info(f"System has {TOTAL_CPUS} available CPUs", 
+           event_type="system_info", 
+           cpu_count=TOTAL_CPUS)
 
 # Maximum concurrent jobs (can be overridden with environment variable)
 MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", 2))
@@ -92,6 +89,8 @@ async def write_results_json(
     Returns:
         Path to the generated JSON results file
     """
+    job_logger = get_logger("eutax.jobs", job_id=job_id)
+    
     json_output_path = os.path.join(job_output_dir, "results.json")
     
     # Get database identifier and version from the path
@@ -114,6 +113,14 @@ async def write_results_json(
                 break
         if db_identifier:
             break
+    
+    job_logger.info(
+        f"Processing {tool} results for job {job_id}",
+        event_type="job_processing_results", 
+        tool=tool,
+        algorithm=algorithm,
+        database=db_identifier or "unknown"
+    )
     
     # Process results based on tool
     if tool.lower() == "blast":
@@ -162,7 +169,12 @@ async def write_results_json(
     with open(json_output_path, 'w') as f:
         json.dump(results, f, indent=2)
     
-    logger.info(f"Parsed {tool.upper()} results with metadata saved to {json_output_path}")
+    job_logger.info(
+        f"Parsed {tool.upper()} results saved to {json_output_path}",
+        event_type="job_results_saved", 
+        output_path=json_output_path,
+        result_size=len(json.dumps(results))
+    )
     
     return json_output_path
 
@@ -172,11 +184,14 @@ async def run_annotation(job_id: str):
     Run the annotation and parse the results.
     Uses a semaphore to limit concurrent resource usage.
     """
+    job_logger = get_logger("eutax.jobs", job_id=job_id)
+    job_logger.info(f"Starting annotation job {job_id}", event_type="job_started")
+    
     # Acquire semaphore to limit concurrent jobs
     async with job_semaphore:
         job_data = database.get_job(job_id)
         if not job_data:
-            logger.error(f"Job {job_id} not found")
+            job_logger.error(f"Job {job_id} not found", event_type="job_error")
             return
 
         # Update job status to running
@@ -189,16 +204,36 @@ async def run_annotation(job_id: str):
         db_path = job_data["database"]
         parameters = job_data["parameters"]
         
+        # Log job parameters
+        job_logger.info(
+            f"Job {job_id} parameters",
+            event_type="job_parameters",
+            file_id=file_id,
+            tool=tool,
+            algorithm=algorithm,
+            database=db_path,
+            parameters=parameters
+        )
+        
         # Calculate CPU allocation for this job based on total available
         # This ensures we don't oversubscribe CPUs across concurrent jobs
         allocated_cpus = calculate_cpu_allocation(tool, parameters)
-        logger.info(f"Job {job_id} allocated {allocated_cpus} CPUs")
+        job_logger.info(
+            f"Job {job_id} allocated {allocated_cpus} CPUs",
+            event_type="job_resources",
+            allocated_cpus=allocated_cpus
+        )
         
         # Get input file path
         input_file = database.get_upload(file_id)
         if not input_file or not os.path.exists(input_file):
             database.update_job_status(job_id, JobStatusEnum.FAILED)
-            logger.error(f"Input file {input_file} for job {job_id} not found")
+            job_logger.error(
+                f"Input file {input_file} for job {job_id} not found",
+                event_type="job_error",
+                error="input_file_not_found",
+                file_id=file_id
+            )
             return
 
         # Create job output directory
@@ -214,7 +249,14 @@ async def run_annotation(job_id: str):
             # Count sequences and get lengths
             seq_lengths = await count_sequence_lengths(input_file)
             sequence_count = len(seq_lengths)
-            logger.info(f"Job {job_id} has {sequence_count} sequences")
+            job_logger.info(
+                f"Job {job_id} has {sequence_count} sequences",
+                event_type="job_input_stats",
+                sequence_count=sequence_count,
+                min_length=min(seq_lengths) if seq_lengths else 0,
+                max_length=max(seq_lengths) if seq_lengths else 0,
+                avg_length=sum(seq_lengths)/len(seq_lengths) if seq_lengths else 0
+            )
             
             # Save initial job summary with sequence info to SQLite db
             await db_storage.save_job_summary(
@@ -234,6 +276,12 @@ async def run_annotation(job_id: str):
             
             # Run taxonomic annotation in thread pool
             if tool.lower() == "blast":
+                job_logger.info(
+                    f"Running BLAST for job {job_id}",
+                    event_type="job_blast_start",
+                    algorithm=algorithm
+                )
+                
                 # Run BLAST in a non-blocking way using thread pool
                 output_path = await run_blast_async(
                     input_file, 
@@ -241,6 +289,12 @@ async def run_annotation(job_id: str):
                     algorithm, 
                     db_path,
                     parameters
+                )
+                
+                job_logger.info(
+                    f"BLAST completed for job {job_id}",
+                    event_type="job_blast_complete",
+                    output_path=output_path
                 )
                 
                 # Parse the BLAST results and save as JSON with metadata
@@ -261,6 +315,12 @@ async def run_annotation(job_id: str):
                 }
                 
             elif tool.lower() == "vsearch":
+                job_logger.info(
+                    f"Running VSEARCH for job {job_id}",
+                    event_type="job_vsearch_start",
+                    algorithm=algorithm
+                )
+                
                 # Run VSEARCH in a non-blocking way using thread pool
                 output_path, alignment_output = await run_vsearch_async(
                     input_file, 
@@ -268,6 +328,13 @@ async def run_annotation(job_id: str):
                     algorithm,
                     db_path,
                     parameters
+                )
+                
+                job_logger.info(
+                    f"VSEARCH completed for job {job_id}",
+                    event_type="job_vsearch_complete",
+                    output_path=output_path,
+                    alignment_path=alignment_output
                 )
                 
                 # Parse the VSEARCH results and save as JSON with metadata
@@ -294,12 +361,19 @@ async def run_annotation(job_id: str):
             
         except Exception as e:
             status = JobStatusEnum.FAILED
-            logger.error(f"Error running job {job_id}: {str(e)}")
+            job_logger.error(
+                f"Error running job {job_id}: {str(e)}",
+                event_type="job_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True
+            )
         
         finally:
             # Calculate elapsed CPU time
             end_time = time.time()
-            cpu_time_seconds = (end_time - start_time) * allocated_cpus  # Scale by CPU count
+            elapsed_time = end_time - start_time
+            cpu_time_seconds = elapsed_time * allocated_cpus  # Scale by CPU count
             
             # Update job status
             database.update_job_status(job_id, status)
@@ -328,9 +402,20 @@ async def run_annotation(job_id: str):
             )
             
             if status == JobStatusEnum.FINISHED:
-                logger.info(f"Job {job_id} completed successfully in {cpu_time_seconds:.2f} CPU seconds")
+                job_logger.info(
+                    f"Job {job_id} completed successfully",
+                    event_type="job_completed",
+                    elapsed_seconds=round(elapsed_time, 2),
+                    cpu_seconds=round(cpu_time_seconds, 2),
+                    result_files=list(result_files.keys()) if result_files else None
+                )
             else:
-                logger.info(f"Job {job_id} failed after {cpu_time_seconds:.2f} CPU seconds")
+                job_logger.error(
+                    f"Job {job_id} failed",
+                    event_type="job_failed",
+                    elapsed_seconds=round(elapsed_time, 2),
+                    cpu_seconds=round(cpu_time_seconds, 2)
+                )
 
 
 async def count_sequence_lengths(fasta_path: str) -> List[int]:
@@ -418,6 +503,8 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
     Returns:
         Path to results file
     """
+    command_logger = get_logger("eutax.jobs.commands")
+    
     # Use provided parameters or defaults
     max_target_seqs = parameters.get("max_target_seqs", DEFAULT_BLAST_PARAMS["max_target_seqs"])
     num_threads = parameters.get("num_threads", DEFAULT_BLAST_PARAMS["num_threads"])
@@ -463,11 +550,18 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
         "-num_threads", str(num_threads)
     ]
     
-    logger.info(f"Running BLAST command: {' '.join(cmd)}")
+    command_str = ' '.join(cmd)
+    command_logger.info(
+        f"Running BLAST command: {command_str}",
+        event_type="command_execution",
+        tool="blast",
+        command=command_str,
+        output_dir=output_dir
+    )
     
     # Write command to log file
     with open(log_file, "w") as f:
-        f.write(f"Command:\n{' '.join(cmd)}\n\n")
+        f.write(f"Command:\n{command_str}\n\n")
     
     # Run command and capture all output
     process = subprocess.run(
@@ -488,12 +582,29 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
             f.write(process.stderr)
         f.write(f"\nExit code:\n{process.returncode}\n")
     
+    # Log command result
+    if process.returncode == 0:
+        command_logger.info(
+            f"BLAST command completed successfully",
+            event_type="command_completed",
+            tool="blast",
+            exit_code=process.returncode,
+            output_file=results_file
+        )
+    else:
+        command_logger.error(
+            f"BLAST command failed with exit code {process.returncode}",
+            event_type="command_failed",
+            tool="blast",
+            exit_code=process.returncode,
+            stderr=process.stderr[:500]  # Limit error output length
+        )
+    
     # Raise exception if command failed
     if process.returncode != 0:
         error_msg = f"Command failed with exit code {process.returncode}"
         if process.stderr:
             error_msg += f": {process.stderr}"
-        logger.error(error_msg)
         raise Exception(error_msg)
     
     return results_file
@@ -513,6 +624,8 @@ def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, 
     Returns:
         Tuple containing paths to results file and alignment file
     """
+    command_logger = get_logger("eutax.jobs.commands")
+    
     # Use provided parameters or defaults
     min_identity = parameters.get("id", DEFAULT_VSEARCH_PARAMS["id"])
     min_coverage = parameters.get("query_cov", DEFAULT_VSEARCH_PARAMS["query_cov"])
@@ -577,11 +690,18 @@ def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, 
         "--quiet"
     ])
     
-    logger.info(f"Running VSEARCH command: {' '.join(cmd)}")
+    command_str = ' '.join(cmd)
+    command_logger.info(
+        f"Running VSEARCH command: {command_str}",
+        event_type="command_execution",
+        tool="vsearch",
+        command=command_str,
+        output_dir=output_dir
+    )
     
     # Write command to log file
     with open(log_file, "w") as f:
-        f.write(f"Command:\n{' '.join(cmd)}\n\n")
+        f.write(f"Command:\n{command_str}\n\n")
     
     # Run command and capture all output
     process = subprocess.run(
@@ -602,12 +722,30 @@ def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, 
             f.write(process.stderr)
         f.write(f"\nExit code:\n{process.returncode}\n")
     
+    # Log command result
+    if process.returncode == 0:
+        command_logger.info(
+            f"VSEARCH command completed successfully",
+            event_type="command_completed",
+            tool="vsearch",
+            exit_code=process.returncode,
+            output_file=results_file,
+            alignment_file=alignment_output
+        )
+    else:
+        command_logger.error(
+            f"VSEARCH command failed with exit code {process.returncode}",
+            event_type="command_failed",
+            tool="vsearch",
+            exit_code=process.returncode,
+            stderr=process.stderr[:500]  # Limit error output length
+        )
+    
     # Raise exception if command failed
     if process.returncode != 0:
         error_msg = f"Command failed with exit code {process.returncode}"
         if process.stderr:
             error_msg += f": {process.stderr}"
-        logger.error(error_msg)
         raise Exception(error_msg)
     
     return results_file, alignment_output
