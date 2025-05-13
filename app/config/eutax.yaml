@@ -1,4 +1,3 @@
-
 ## EUTAX configuration file
 
 ## API endpoint rate limits
@@ -23,5 +22,15 @@ rate_limits: {
 
 ## Logging configuration
 logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  # Date format for timestamps
   datefmt: "%Y-%m-%d %H:%M:%S"
+  # Timezone for timestamps (IANA timezone database name)
   timezone: "Europe/Tallinn"
+  # Number of rotated logs to keep (1 file per day)
+  backupCount: 200
+  # Whether to also log authentication attempts at the DEBUG level
+  log_auth_debug: true
+  # Whether to include request payloads in logs (may contain sensitive data)
+  log_request_payload: false
