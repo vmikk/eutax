@@ -71,7 +71,7 @@ COPY run.py /app/
 
 ## Create non-root user and set permissions
 RUN groupadd -r fastapi && useradd -r -g fastapi fastapi \
-    && mkdir -p wd/uploads wd/outputs \
+    && mkdir -p wd/uploads wd/outputs wd/logs \
     && chown -R fastapi:fastapi /app \
     && chmod -R 755 /app
 
@@ -79,6 +79,7 @@ RUN groupadd -r fastapi && useradd -r -g fastapi fastapi \
 ENV PYTHONUNBUFFERED=1 \
     UPLOAD_DIR=/app/wd/uploads \
     OUTPUT_DIR=/app/wd/outputs \
+    LOG_DIR=/app/wd/logs \
     MAX_CPUS=8 \
     MAX_CONCURRENT_JOBS=2 \
     DISABLE_DOCS=false
