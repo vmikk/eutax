@@ -266,3 +266,77 @@ class APITester:
             self.print_failure(f"Results download request failed: {str(e)}")
             return False
 
+    def run_parameter_test_suite(self, test_file: str):
+        """Run tests with various parameter combinations"""
+        self.print_header("EUTAX API test suite")
+        
+        # Parameter combinations to test
+        test_cases = [
+            {"tool": "blast", "algorithm": "megablast", "database": "eukaryome_its"},
+            {"tool": "blast", "algorithm": "blastn", "database": "eukaryome_its"},
+            {"tool": "vsearch", "algorithm": "usearch_global", "database": "eukaryome_its"},
+            {"tool": "vsearch", "algorithm": "search_exact", "database": "eukaryome_its"}
+        ]
+        
+        # First check server health
+        if not self.test_health():
+            self.print_failure("Server health check failed. Aborting test suite.")
+            return
+        
+        # Upload the test file once
+        file_id = self.test_upload(test_file)
+        if not file_id:
+            self.print_failure("File upload failed. Aborting test suite.")
+            return
+        
+        # Create a results table
+        results_table = Table(title="Parameter Test Results")
+        results_table.add_column("Tool", style="cyan")
+        results_table.add_column("Algorithm", style="cyan")
+        results_table.add_column("Database", style="cyan")
+        results_table.add_column("Job ID", style="blue")
+        results_table.add_column("Status", style="green")
+        results_table.add_column("Results", style="yellow")
+        
+        # Run tests for each parameter combination
+        for case in test_cases:
+            tool = case["tool"]
+            algorithm = case["algorithm"]
+            database = case["database"]
+            
+            # Create job
+            job_id = self.test_create_job(file_id, tool, algorithm, database)
+            if not job_id:
+                results_table.add_row(tool, algorithm, database, "FAILED", "N/A", "N/A", "N/A")
+                continue
+            
+            # Check status and wait for completion
+            status = self.test_job_status(job_id, wait_for_completion=True)
+            
+            # Download results if job completed successfully
+            results_status = "N/A"
+            if status == "finished":
+                if self.test_download_results(job_id):
+                    results_status = "Downloaded"
+                else:
+                    results_status = "Failed to download"
+         
+            # Add short delay between tests
+            time.sleep(1)
+        
+        # Print results table
+        self.console.print(results_table)
+        
+        # Write summary to file
+        summary_file = f"test_results/test_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        with open(summary_file, "w") as f:
+            f.write(f"API Test Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Server: {self.base_url}\n")
+            f.write(f"Test file: {test_file}\n\n")
+            
+            for case in test_cases:
+                f.write(f"Tool: {case['tool']}, Algorithm: {case['algorithm']}, Database: {case['database']}\n")
+        
+        self.print_success(f"Test suite completed. Summary written to {summary_file}")
+
+
