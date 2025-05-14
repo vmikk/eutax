@@ -230,3 +230,39 @@ class APITester:
             self.print_failure(f"Final job status request failed: {str(e)}")
             return None
 
+    def test_download_results(self, job_id: str) -> bool:
+        """Test results download endpoint"""
+        self.print_header(f"Downloading Results for Job: {job_id}")
+        
+        try:
+            response = requests.get(
+                f"{self.base_url}/api/v1/jobs/{job_id}/results/json",
+                headers=self.headers
+            )
+            
+            if response.status_code == 200:
+                results_data = response.json()
+                
+                # Save results to file
+                results_file = f"test_results/job_{job_id}_results.json"
+                with open(results_file, "w") as f:
+                    json.dump(results_data, f, indent=2)
+                
+                self.print_success(f"Results downloaded successfully to {results_file}")
+                
+                # Display summary of results
+                if "results" in results_data and "summary" in results_data:
+                    summary = results_data["summary"]
+                    self.print_info(f"Total queries: {summary.get('total_queries', 'N/A')}")
+                    self.print_info(f"Total hits: {summary.get('total_hits', 'N/A')}")
+                
+                return True
+            else:
+                self.print_failure(f"Results download failed with status code: {response.status_code}")
+                if response.status_code == 404:
+                    self.print_info("This might be normal if the job had no results")
+                return False
+        except Exception as e:
+            self.print_failure(f"Results download request failed: {str(e)}")
+            return False
+
