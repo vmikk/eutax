@@ -91,16 +91,16 @@ class JobResponse(BaseModel):
 class JobStatusResponse(BaseModel):
     job_id: str
     status: JobStatusEnum
-    progress: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    progress: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class JobSummary(BaseModel):
     job_id: str
     status: JobStatusEnum
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class PaginationInfo(BaseModel):
@@ -110,9 +110,9 @@ class PaginationInfo(BaseModel):
 
 
 class JobListResponse(BaseModel):
-    jobs: List[JobSummary]
+    jobs: list[JobSummary]
     pagination: PaginationInfo
 
 
 class ErrorResponse(BaseModel):
-    error: Dict[str, Union[int, str]]
+    error: dict[str, int | str]
