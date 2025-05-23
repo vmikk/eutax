@@ -3,12 +3,9 @@ Models module - defines Pydantic models and enums for request validation,
 response serialization, and data typing throughout the application.
 """
 
-from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Union
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from datetime import datetime
-from pydantic import validator
-import os
 import re
 
 
@@ -45,21 +42,25 @@ class JobRequest(BaseModel):
     tool: ToolEnum = Field(..., description="Tool to use (blast, vsearch)")
     algorithm: AlgorithmEnum = Field(..., description="Algorithm variant for the selected tool (blastn, megablast for BLAST; usearch_global, search_exact for VSEARCH)")
     database: str = Field(..., description="Reference database identifier (e.g., 'eukaryome_its')")
-    parameters: Optional[Dict[str, Union[str, int, float]]] = Field(
-        {}, description="Additional tool-specific parameters"
+    parameters: dict[str, str | int | float] = Field(
+        default={}, description="Additional tool-specific parameters"
     )
     
-    @validator('algorithm')
-    def validate_algorithm_for_tool(cls, v, values):
-        if 'tool' in values:
-            if values['tool'] == ToolEnum.BLAST and v not in [AlgorithmEnum.BLASTN, AlgorithmEnum.MEGABLAST]:
+    @field_validator('algorithm')
+    @classmethod
+    def validate_algorithm_for_tool(cls, v: AlgorithmEnum, info) -> AlgorithmEnum:
+        # Access the tool field from the model data
+        tool = info.data.get('tool') if info.data else None
+        if tool:
+            if tool == ToolEnum.BLAST and v not in [AlgorithmEnum.BLASTN, AlgorithmEnum.MEGABLAST]:
                 raise ValueError(f"Algorithm '{v}' not supported for BLAST. Use 'blastn' or 'megablast'")
-            elif values['tool'] == ToolEnum.VSEARCH and v not in [AlgorithmEnum.USEARCH_GLOBAL, AlgorithmEnum.SEARCH_EXACT]:
+            elif tool == ToolEnum.VSEARCH and v not in [AlgorithmEnum.USEARCH_GLOBAL, AlgorithmEnum.SEARCH_EXACT]:
                 raise ValueError(f"Algorithm '{v}' not supported for VSEARCH. Use 'usearch_global' or 'search_exact'")
         return v
     
-    @validator('database')
-    def validate_database_identifier(cls, v, values):
+    @field_validator('database')
+    @classmethod
+    def validate_database_identifier(cls, v: str) -> str:
         # Only allow alphanumeric characters, underscore, and dash in database identifiers
         if not re.match(r'^[a-zA-Z0-9_\-]+$', v):
             raise ValueError("Database identifier can only contain alphanumeric characters, underscore, and dash")
@@ -70,8 +71,9 @@ class JobRequest(BaseModel):
         
         return v
     
-    @validator('parameters')
-    def sanitize_parameters(cls, v):
+    @field_validator('parameters')
+    @classmethod
+    def sanitize_parameters(cls, v: dict[str, str | int | float]) -> dict[str, str | int | float]:
         # Sanitize parameter values
         if v and isinstance(v, dict):
             for key, value in v.items():
