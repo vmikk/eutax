@@ -107,7 +107,7 @@ def list_jobs(status: Optional[str] = None, limit: int = 10, offset: int = 0) ->
     job_list = []
     
     for job_id, job_data in jobs.items():
-        if status is None or job_data["status"] == status:
+        if status is None or (hasattr(job_data["status"], "value") and job_data["status"].value == status):
             job_list.append({
                 "job_id": job_id,
                 "status": job_data["status"],
