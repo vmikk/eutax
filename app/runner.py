@@ -479,6 +479,14 @@ def calculate_cpu_allocation(tool: str, parameters: Dict) -> int:
         requested_threads = parameters.get("threads", DEFAULT_VSEARCH_PARAMS["threads"])
     else:
         requested_threads = 1  # Default for unknown tools
+
+    # Sanitize threads: coerce to int >= 1
+    try:
+        requested_threads = int(requested_threads)
+    except Exception:
+        requested_threads = 1
+    if requested_threads < 1:
+        requested_threads = 1
     
     # Calculate a fair share based on available CPUs and max concurrent jobs
     fair_share = max(1, TOTAL_CPUS // MAX_CONCURRENT_JOBS)
@@ -533,9 +541,48 @@ def run_blast(input_file: str, output_dir: str, algorithm: str, db_path: str, pa
     """
     command_logger = get_logger("eutax.jobs.commands")
     
-    # Use provided parameters or defaults
+    # Use provided parameters or defaults (sanitize values)
     max_target_seqs = parameters.get("max_target_seqs", DEFAULT_BLAST_PARAMS["max_target_seqs"])
     num_threads = parameters.get("num_threads", DEFAULT_BLAST_PARAMS["num_threads"])
+
+    # Sanitize integers
+    try:
+        max_target_seqs = int(max_target_seqs)
+    except Exception:
+        command_logger.warning(
+            "Invalid max_target_seqs; defaulting",
+            event_type="param_sanitized",
+            param="max_target_seqs",
+            value=max_target_seqs,
+        )
+        max_target_seqs = DEFAULT_BLAST_PARAMS["max_target_seqs"]
+    if max_target_seqs < 1:
+        command_logger.warning(
+            "max_target_seqs below minimum; clamping to 1",
+            event_type="param_sanitized",
+            param="max_target_seqs",
+            value=max_target_seqs,
+        )
+        max_target_seqs = 1
+
+    try:
+        num_threads = int(num_threads)
+    except Exception:
+        command_logger.warning(
+            "Invalid num_threads; defaulting",
+            event_type="param_sanitized",
+            param="num_threads",
+            value=num_threads,
+        )
+        num_threads = DEFAULT_BLAST_PARAMS["num_threads"]
+    if num_threads < 1:
+        command_logger.warning(
+            "num_threads below minimum; clamping to 1",
+            event_type="param_sanitized",
+            param="num_threads",
+            value=num_threads,
+        )
+        num_threads = 1
     
     # Set output files
     results_file = os.path.join(output_dir, "res_blast.txt")
@@ -655,12 +702,71 @@ def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, 
     command_logger = get_logger("eutax.jobs.commands")
     
     # Use provided parameters or defaults
-    min_identity = parameters.get("id", DEFAULT_VSEARCH_PARAMS["id"])
-    min_coverage = parameters.get("query_cov", DEFAULT_VSEARCH_PARAMS["query_cov"])
-    maxaccepts = parameters.get("maxaccepts", DEFAULT_VSEARCH_PARAMS["maxaccepts"])
-    maxrejects = parameters.get("maxrejects", DEFAULT_VSEARCH_PARAMS["maxrejects"])
-    maxhits = parameters.get("maxhits", DEFAULT_VSEARCH_PARAMS["maxhits"])
-    num_threads = parameters.get("threads", DEFAULT_VSEARCH_PARAMS["threads"])
+    min_identity = parameters.get("id", DEFAULT_VSEARCH_PARAMS["id"])                # percent 0-100
+    min_coverage = parameters.get("query_cov", DEFAULT_VSEARCH_PARAMS["query_cov"])  # percent 0-100
+    maxaccepts = parameters.get("maxaccepts", DEFAULT_VSEARCH_PARAMS["maxaccepts"]) 
+    maxrejects = parameters.get("maxrejects", DEFAULT_VSEARCH_PARAMS["maxrejects"]) 
+    maxhits = parameters.get("maxhits", DEFAULT_VSEARCH_PARAMS["maxhits"]) 
+    num_threads = parameters.get("threads", DEFAULT_VSEARCH_PARAMS["threads"]) 
+
+    # Sanitize numeric params
+    def _coerce_int(name, value, minimum, default):
+        try:
+            iv = int(value)
+        except Exception:
+            command_logger.warning(
+                "Invalid integer parameter; defaulting",
+                event_type="param_sanitized",
+                param=name,
+                value=value,
+            )
+            iv = default
+        if iv < minimum:
+            command_logger.warning(
+                "Integer parameter below minimum; clamping",
+                event_type="param_sanitized",
+                param=name,
+                value=iv,
+                minimum=minimum,
+            )
+            iv = minimum
+        return iv
+
+    def _coerce_percent(name, value, default):
+        try:
+            fv = float(value)
+        except Exception:
+            command_logger.warning(
+                "Invalid percent parameter; defaulting",
+                event_type="param_sanitized",
+                param=name,
+                value=value,
+            )
+            fv = default
+        if fv < 0:
+            command_logger.warning(
+                "Percent parameter below 0; clamping",
+                event_type="param_sanitized",
+                param=name,
+                value=fv,
+            )
+            fv = 0
+        if fv > 100:
+            command_logger.warning(
+                "Percent parameter above 100; clamping",
+                event_type="param_sanitized",
+                param=name,
+                value=fv,
+            )
+            fv = 100
+        return fv
+
+    min_identity = _coerce_percent("id", min_identity, DEFAULT_VSEARCH_PARAMS["id"]) 
+    min_coverage = _coerce_percent("query_cov", min_coverage, DEFAULT_VSEARCH_PARAMS["query_cov"]) 
+    maxaccepts = _coerce_int("maxaccepts", maxaccepts, 1, DEFAULT_VSEARCH_PARAMS["maxaccepts"]) 
+    maxrejects = _coerce_int("maxrejects", maxrejects, 0, DEFAULT_VSEARCH_PARAMS["maxrejects"]) 
+    maxhits = _coerce_int("maxhits", maxhits, 1, DEFAULT_VSEARCH_PARAMS["maxhits"]) 
+    num_threads = _coerce_int("threads", num_threads, 1, DEFAULT_VSEARCH_PARAMS["threads"]) 
     
     # Set output files
     results_file = os.path.join(output_dir, "res_vsearch.txt")
