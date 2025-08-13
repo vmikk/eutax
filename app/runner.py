@@ -777,3 +777,22 @@ def run_vsearch(input_file: str, output_dir: str, algorithm: str, db_path: str, 
         raise Exception(error_msg)
     
     return results_file, alignment_output
+
+
+def shutdown_resources(cancel_futures: bool = True) -> None:
+    """
+    Gracefully shutdown shared executors and release resources to avoid dangling tasks.
+    """
+    try:
+        logger.info(
+            "Shutting down background executors",
+            event_type="executor_shutdown",
+        )
+        thread_pool.shutdown(wait=False, cancel_futures=cancel_futures)
+    except Exception as e:
+        logger.error(
+            "Error during executor shutdown",
+            event_type="executor_shutdown_failed",
+            error=str(e),
+            exc_info=True,
+        )

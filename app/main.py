@@ -23,6 +23,7 @@ import structlog
 import uuid
 from fastapi import Request, Response
 import time
+from app.runner import shutdown_resources
 
 # root structlog logger
 logger = get_logger("eutax.system")
@@ -225,6 +226,9 @@ async def shutdown_event():
     """
     Log API shutdown
     """
-    logger.info("API shutting down", event_type="api_shutdown")
+    try:
+        shutdown_resources()
+    finally:
+        logger.info("API shutting down", event_type="api_shutdown")
 
 
