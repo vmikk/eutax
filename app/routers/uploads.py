@@ -15,6 +15,8 @@ from app.models.models import SequenceUploadResponse
 from app import database
 from app.limiter import limiter, rate_limits
 from app.logging_config import get_logger
+from pathlib import Path
+import gzip
 
 # Create logger
 logger = get_logger("eutax.uploads")
@@ -25,8 +27,8 @@ router = APIRouter()
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.getcwd(), "wd/uploads"))
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Allowed file extensions
-ALLOWED_EXTENSIONS = {".fasta", ".fa", ".fna", ".fa.gz", ".fna.gz", ".txt", ".txt.gz"}
+# Allowed file extensions (supporting multi-suffix compressed inputs)
+ALLOWED_EXTENSIONS = {".fasta", ".fa", ".fna", ".fa.gz", ".fna.gz", ".fasta.gz", ".txt", ".txt.gz"}
 
 
 def is_valid_fasta(filepath: str) -> bool:
@@ -35,7 +37,13 @@ def is_valid_fasta(filepath: str) -> bool:
     Very basic check: at least one line should start with '>'.
     """
     try:
-        with open(filepath, "r") as f:
+        # Detect gzip by extension and open appropriately
+        if filepath.endswith(".gz"):
+            opener = lambda p: gzip.open(p, "rt", errors="ignore")
+        else:
+            opener = lambda p: open(p, "r", errors="ignore")
+
+        with opener(filepath) as f:
             for line in f:
                 if line.startswith(">"):
                     return True
@@ -80,9 +88,10 @@ async def upload_fasta(request: Request, response: Response, file: UploadFile = 
             "error": {"code": 413, "message": "File too large"}})
     await file.seek(0)  # Reset file position
     
-    # Check file extension
-    _, ext = os.path.splitext(file.filename)
-    if ext.lower() not in ALLOWED_EXTENSIONS:
+    # Check file extension, supporting multi-suffix (e.g., .fa.gz)
+    suffixes = Path(file.filename).suffixes
+    ext = "".join(s.lower() for s in suffixes) if suffixes else ""
+    if ext not in ALLOWED_EXTENSIONS:
         upload_logger.warning(
             f"Upload rejected: invalid file extension ({ext})",
             event_type="upload_rejected",
@@ -129,8 +138,9 @@ async def upload_fasta(request: Request, response: Response, file: UploadFile = 
                 }
             })
         
-        # Create final filepath and save the file
-        final_filepath = os.path.join(UPLOAD_DIR, f"{file_id}{ext}")
+        # Create final filepath and save the file (preserve multi-suffix)
+        final_ext = ext if ext else Path(file.filename).suffix.lower()
+        final_filepath = os.path.join(UPLOAD_DIR, f"{file_id}{final_ext}")
         shutil.move(temp_file.name, final_filepath)
         
         upload_logger.info(

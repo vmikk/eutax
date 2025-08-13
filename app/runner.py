@@ -13,6 +13,7 @@ import concurrent.futures
 import multiprocessing
 import time
 import json
+import shutil
 from Bio import SeqIO
 from app.models.models import JobStatusEnum
 from app import database
@@ -20,6 +21,8 @@ from app import db_storage
 from app.result_parsers import parse_blast_file_to_json, parse_vsearch_file_to_json
 from app.routers.refdbs import get_refdb_path, load_refdb_config
 from app.logging_config import get_logger
+from pathlib import Path
+import gzip
 
 # Initialize logger
 logger = get_logger("eutax.jobs")
@@ -274,6 +277,23 @@ async def run_annotation(job_id: str):
                 cpu_count=allocated_cpus
             )
             
+            # If input is gzipped, decompress to job output directory (BLAST doesn't read gz natively)
+            decompressed_input = input_file
+            if input_file.endswith(".gz"):
+                decompressed_input = os.path.join(job_output_dir, f"{Path(input_file).stem}")
+                try:
+                    with gzip.open(input_file, 'rb') as gz_in, open(decompressed_input, 'wb') as out_f:
+                        shutil.copyfileobj(gz_in, out_f)
+                    job_logger.info(
+                        f"Decompressed input FASTA",
+                        event_type="job_input_decompressed",
+                        source=input_file,
+                        target=decompressed_input
+                    )
+                except Exception as e:
+                    status = JobStatusEnum.FAILED
+                    raise
+
             # Run taxonomic annotation in thread pool
             if tool.lower() == "blast":
                 job_logger.info(
@@ -284,7 +304,7 @@ async def run_annotation(job_id: str):
                 
                 # Run BLAST in a non-blocking way using thread pool
                 output_path = await run_blast_async(
-                    input_file, 
+                    decompressed_input, 
                     job_output_dir, 
                     algorithm, 
                     db_path,
@@ -305,7 +325,7 @@ async def run_annotation(job_id: str):
                     db_path=db_path,
                     raw_output_path=output_path,
                     job_output_dir=job_output_dir,
-                    input_file=input_file
+                    input_file=decompressed_input
                 )
                 
                 # Add the JSON output path to the job data
@@ -323,7 +343,7 @@ async def run_annotation(job_id: str):
                 
                 # Run VSEARCH in a non-blocking way using thread pool
                 output_path, alignment_output = await run_vsearch_async(
-                    input_file, 
+                    decompressed_input, 
                     job_output_dir, 
                     algorithm,
                     db_path,
@@ -345,7 +365,7 @@ async def run_annotation(job_id: str):
                     db_path=db_path,
                     raw_output_path=output_path,
                     job_output_dir=job_output_dir,
-                    input_file=input_file,
+                    input_file=decompressed_input,
                     alignment_output=alignment_output
                 )
                 
@@ -425,8 +445,16 @@ async def count_sequence_lengths(fasta_path: str) -> List[int]:
     """
     def _count_sequence_lengths(path):
         lengths = []
-        for record in SeqIO.parse(path, "fasta"):
-            lengths.append(len(record.seq))
+        try:
+            if str(path).endswith('.gz'):
+                with gzip.open(path, 'rt', errors='ignore') as handle:
+                    for record in SeqIO.parse(handle, "fasta"):
+                        lengths.append(len(record.seq))
+            else:
+                for record in SeqIO.parse(path, "fasta"):
+                    lengths.append(len(record.seq))
+        except Exception:
+            return []
         return lengths
     
     # Run in thread pool to avoid blocking
