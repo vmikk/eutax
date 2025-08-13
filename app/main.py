@@ -73,15 +73,15 @@ async def logging_middleware(request: Request, call_next):
         event_type="request_started"
     )
     
-    # Record the start time
-    start_time = time.time()
+    # Record the start time with high-resolution monotonic clock
+    start_time = time.perf_counter()
     
     # Process the request, catching any exceptions
     try:
         response = await call_next(request)
         
         # Calculate request processing time
-        process_time = time.time() - start_time
+        process_time = time.perf_counter() - start_time
         
         # Add the request ID to the response headers
         response.headers["X-Request-ID"] = request_id
@@ -98,7 +98,7 @@ async def logging_middleware(request: Request, call_next):
         
     except Exception as e:
         # Calculate request processing time
-        process_time = time.time() - start_time
+        process_time = time.perf_counter() - start_time
         
         # Log the exception
         request_logger.error(
