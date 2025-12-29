@@ -54,7 +54,7 @@ async def logging_middleware(request: Request, call_next):
     Middleware to add request logging and context tracking
     """
     # Generate a request ID
-    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid7()))
     
     # Create a request-specific logger with context
     request_logger = get_logger(

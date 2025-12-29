@@ -102,7 +102,7 @@ async def create_job(request: Request, response: Response, job_request: JobReque
         })
     
     # Generate a unique job ID
-    job_id = str(uuid.uuid4())
+    job_id = str(uuid.uuid7())
     job_logger = job_logger.bind(job_id=job_id)
     
     # Store job in database

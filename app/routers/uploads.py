@@ -98,7 +98,7 @@ async def upload_fasta(request: Request, response: Response, file: UploadFile = 
         })
     
     # Generate a unique sequence ID
-    file_id = str(uuid.uuid4())
+    file_id = str(uuid.uuid7())
     upload_logger = upload_logger.bind(file_id=file_id)
     
     # Create a temporary file for validation
