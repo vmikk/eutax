@@ -8,6 +8,14 @@ A FastAPI-based server for taxonomic annotation of DNA sequences.
 - Run taxonomic annotation using BLAST or VSEARCH
 - Track job status and retrieve results
 - RESTful API with auto-generated documentation
+
+## Core dependencies
+
+- Python 3.14
+- FastAPI 0.128
+- BLAST+ 2.17
+- VSEARCH 2.30
+
 ## Results Format
 
 The `results.json` file contains taxonomic annotation results in a structured format.  
