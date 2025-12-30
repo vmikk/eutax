@@ -340,3 +340,17 @@ class APITester:
         self.print_success(f"Test suite completed. Summary written to {summary_file}")
 
 
+def main():
+    parser = argparse.ArgumentParser(description="EUTAX API tester")
+    parser.add_argument("--url", default="http://localhost:8000", help="Base URL of the API server")
+    parser.add_argument("--api-key", default="abcd", help="API key for authentication")
+    parser.add_argument("--test-data", required=True, help="Path to FASTA file for testing")
+    
+    args = parser.parse_args()
+    
+    tester = APITester(args.url, args.api_key, args.test_data)
+    tester.run_parameter_test_suite(args.test_data)
+
+
+if __name__ == "__main__":
+    main()
