@@ -6,7 +6,7 @@ manages job output, and provides background task processing functionality.
 import os
 import subprocess
 import tempfile
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TypeVar, Callable, Any
 import uuid
 import asyncio
 import concurrent.futures
@@ -39,6 +39,14 @@ job_semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 
 # Thread pool executor for running blocking operations
 thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS)
+
+# Helper for running blocking work in our configured thread pool.
+# Using get_running_loop() avoids deprecated get_event_loop() behavior in newer Python.
+T = TypeVar("T")
+
+async def run_in_thread_pool(func: Callable[..., T], *args: Any) -> T:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(thread_pool, func, *args)
 
 # Default output directory
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", os.path.join(os.getcwd(), "wd/outputs"))
@@ -125,20 +133,18 @@ async def write_results_json(
     # Process results based on tool
     if tool.lower() == "blast":
         # Parse BLAST results
-        result_json = await asyncio.get_event_loop().run_in_executor(
-            thread_pool,
+        result_json = await run_in_thread_pool(
             parse_blast_file_to_json,
-            raw_output_path, 
+            raw_output_path,
             None,       # Don't write to file yet
             input_file  # Pass the input FASTA file to correctly count queries
         )
         
     elif tool.lower() == "vsearch":
         # Parse VSEARCH results
-        result_json = await asyncio.get_event_loop().run_in_executor(
-            thread_pool,
+        result_json = await run_in_thread_pool(
             parse_vsearch_file_to_json,
-            raw_output_path, 
+            raw_output_path,
             alignment_output,
             None,       # Don't write to file yet
             input_file  # Pass the input FASTA file to correctly count queries
@@ -430,11 +436,7 @@ async def count_sequence_lengths(fasta_path: str) -> List[int]:
         return lengths
     
     # Run in thread pool to avoid blocking
-    return await asyncio.get_event_loop().run_in_executor(
-        thread_pool,
-        _count_sequence_lengths,
-        fasta_path
-    )
+    return await run_in_thread_pool(_count_sequence_lengths, fasta_path)
 
 
 def calculate_cpu_allocation(tool: str, parameters: Dict) -> int:
@@ -467,8 +469,7 @@ async def run_blast_async(input_file: str, output_dir: str, algorithm: str, db_p
     adjusted_parameters = parameters.copy()
     adjusted_parameters["num_threads"] = calculate_cpu_allocation("blast", parameters)
     
-    return await asyncio.get_event_loop().run_in_executor(
-        thread_pool,
+    return await run_in_thread_pool(
         run_blast,
         input_file, output_dir, algorithm, db_path, adjusted_parameters
     )
@@ -482,8 +483,7 @@ async def run_vsearch_async(input_file: str, output_dir: str, algorithm: str, db
     adjusted_parameters = parameters.copy()
     adjusted_parameters["threads"] = calculate_cpu_allocation("vsearch", parameters)
     
-    return await asyncio.get_event_loop().run_in_executor(
-        thread_pool,
+    return await run_in_thread_pool(
         run_vsearch,
         input_file, output_dir, algorithm, db_path, adjusted_parameters
     )
