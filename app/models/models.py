@@ -116,3 +116,29 @@ class JobListResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: dict[str, int | str]
+
+
+# ---- Reference database (refdb.yaml) models ----
+class RefDbPaths(BaseModel):
+    """
+    Paths for a single reference database entry.
+
+    Notes:
+    - For BLAST, the config typically stores the *database prefix* (e.g. /data/db/NAME),
+      not a single file with an extension.
+    """
+
+    blast: str | None = None
+    vsearch_global: str | None = None
+    vsearch_exact: str | None = None
+
+
+class RefDbEntry(BaseModel):
+    description: str = ""
+    version: str = ""
+    regions: list[str] = Field(default_factory=list)
+    paths: RefDbPaths = Field(default_factory=RefDbPaths)
+
+
+class RefDbConfig(BaseModel):
+    refdbs: dict[str, RefDbEntry] = Field(default_factory=dict)
