@@ -198,6 +198,10 @@ def ensure_refdbs_available_or_exit(*, logger=None, colors=None) -> None:
 
     msg = _format_startup_failure(colors=colors, resolved_config_path=resolved, missing=missing)
     print(msg, file=sys.stderr)
+    try:
+        sys.stderr.flush()
+    except Exception:
+        pass
 
     if logger is not None:
         logger.error(
@@ -207,7 +211,10 @@ def ensure_refdbs_available_or_exit(*, logger=None, colors=None) -> None:
             missing=[item.__dict__ for item in missing],
         )
 
-    raise SystemExit(2)
+    # In FastAPI/Starlette lifespan, raising SystemExit/Exception causes an
+    # "ERROR: Traceback ..." log which looks like an application crash.
+    # We intentionally terminate the process *without* raising, to keep logs clean.
+    os._exit(2)
 
 
 def main() -> None:
