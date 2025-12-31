@@ -3,6 +3,7 @@ Main application file for EUTAX API - initializes FastAPI app, sets up middlewar
 includes routers, and defines basic endpoints.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -38,11 +39,59 @@ class Colors:
 # Check if docs should be disabled
 DISABLE_DOCS = os.getenv("DISABLE_DOCS", "false").lower() == "true"
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    FastAPI lifespan handler (preferred over @app.on_event).
+    Logs API authentication + docs status on startup and shutdown.
+    """
+    # ---- startup ----
+    if API_KEY:
+        # Determine the source of the API key
+        secrets_path = "/run/secrets/api_key"
+        api_key_source = "Docker secrets" if os.path.exists(secrets_path) else "environment variable"
+        
+        print(f"{Colors.GREEN}API KEY IS SET - Protected endpoints require authentication{Colors.RESET}")
+        print(f"{Colors.BLUE}API key loaded from: {api_key_source}{Colors.RESET}")
+        
+        # Log using structured logger
+        logger.info(
+            "API started with authentication enabled",
+            event_type="api_startup",
+            auth_enabled=True,
+            auth_source=api_key_source
+        )
+    else:
+        print(f"{Colors.RED}WARNING: API KEY IS NOT SET - ALL ENDPOINTS ARE UNPROTECTED!{Colors.RESET}")
+        print(f"{Colors.RED}To enable authentication, set the API_KEY environment variable or use Docker secrets{Colors.RESET}")
+        
+        # Log using structured logger
+        logger.warning(
+            "API started without authentication",
+            event_type="api_startup",
+            auth_enabled=False
+        )
+
+    # Log documentation status
+    if DISABLE_DOCS:
+        print(f"{Colors.YELLOW}API documentation (Swagger UI, ReDoc) is DISABLED{Colors.RESET}")
+        logger.info("API documentation is disabled", event_type="api_startup", docs_enabled=False)
+    else:
+        print(f"{Colors.BLUE}API documentation is ENABLED - available at /docs and /redoc{Colors.RESET}")
+        logger.info("API documentation is enabled", event_type="api_startup", docs_enabled=True)
+
+    try:
+        yield
+    finally:
+        # ---- shutdown ----
+        logger.info("API shutting down", event_type="api_shutdown")
+
 # Create FastAPI app
 app = FastAPI(
     title="EUTAX",
     description="API for taxonomic annotation of DNA sequences",
     version="0.0.1",
+    lifespan=lifespan,
     docs_url=None if DISABLE_DOCS else "/docs",
     redoc_url=None if DISABLE_DOCS else "/redoc",
     openapi_url=None if DISABLE_DOCS else "/openapi.json",
@@ -180,51 +229,3 @@ async def health_check():
             "annotation_services": "operational"
         }
     ) 
-
-@app.on_event("startup")
-async def startup_event():
-    """
-    Log API authentication status on startup
-    """
-    if API_KEY:
-        # Determine the source of the API key
-        secrets_path = "/run/secrets/api_key"
-        api_key_source = "Docker secrets" if os.path.exists(secrets_path) else "environment variable"
-        
-        print(f"{Colors.GREEN}API KEY IS SET - Protected endpoints require authentication{Colors.RESET}")
-        print(f"{Colors.BLUE}API key loaded from: {api_key_source}{Colors.RESET}")
-        
-        # Log using structured logger
-        logger.info(
-            "API started with authentication enabled",
-            event_type="api_startup",
-            auth_enabled=True,
-            auth_source=api_key_source
-        )
-    else:
-        print(f"{Colors.RED}WARNING: API KEY IS NOT SET - ALL ENDPOINTS ARE UNPROTECTED!{Colors.RESET}")
-        print(f"{Colors.RED}To enable authentication, set the API_KEY environment variable or use Docker secrets{Colors.RESET}")
-        
-        # Log using structured logger
-        logger.warning(
-            "API started without authentication",
-            event_type="api_startup",
-            auth_enabled=False
-        )
-
-    # Log documentation status
-    if DISABLE_DOCS:
-        print(f"{Colors.YELLOW}API documentation (Swagger UI, ReDoc) is DISABLED{Colors.RESET}")
-        logger.info("API documentation is disabled", event_type="api_startup", docs_enabled=False)
-    else:
-        print(f"{Colors.BLUE}API documentation is ENABLED - available at /docs and /redoc{Colors.RESET}")
-        logger.info("API documentation is enabled", event_type="api_startup", docs_enabled=True)
-        
-@app.on_event("shutdown")
-async def shutdown_event():
-    """
-    Log API shutdown
-    """
-    logger.info("API shutting down", event_type="api_shutdown")
-
-
