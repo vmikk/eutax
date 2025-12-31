@@ -1,5 +1,8 @@
 refdbs:
 
+  ## NB! There is a database validation step on startup to ensure that the databases are available
+  # if the databases are not available, the API will not start and the container will exit.
+
   # EUKARYOME ITS database
   eukaryome_its:
     description: "EUKARYOME ITS rRNA reference database"
