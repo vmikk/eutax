@@ -10,9 +10,10 @@ import yaml
 import os
 import logging
 from app.limiter import limiter, rate_limits
+from app.refdb_validate import get_refdb_config_path
 
 # Configuration
-REFDB_CONFIG_PATH = os.getenv("REFDB_CONFIG_PATH", "/app/app/config/refdb.yaml")
+REFDB_CONFIG_PATH = get_refdb_config_path()
 
 # Initialize router
 router = APIRouter()
