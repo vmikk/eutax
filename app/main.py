@@ -24,6 +24,7 @@ import structlog
 import uuid
 from fastapi import Request, Response
 import time
+from app.refdb_validate import ensure_refdbs_available_or_exit
 
 # root structlog logger
 logger = get_logger("eutax.system")
@@ -46,6 +47,9 @@ async def lifespan(app: FastAPI):
     Logs API authentication + docs status on startup and shutdown.
     """
     # ---- startup ----
+    # Fail fast if reference databases are not available.
+    ensure_refdbs_available_or_exit(logger=logger, colors=Colors)
+
     if API_KEY:
         # Determine the source of the API key
         secrets_path = "/run/secrets/api_key"
