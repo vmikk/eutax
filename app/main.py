@@ -112,6 +112,22 @@ async def logging_middleware(request: Request, call_next):
     """
     Middleware to add request logging and context tracking
     """
+
+    # Healthchecks can be called continuously by Docker
+    # Skip request-level logging for localhost healthchecks to avoid log bloat
+    if SUPPRESS_LOCALHOST_HEALTHCHECK_LOGS:
+        try:
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v1/health"
+                and request.client
+                and request.client.host in ("127.0.0.1", "::1")
+            ):
+                return await call_next(request)
+        except Exception:
+            # If anything about request inspection fails, fall back to normal logging
+            pass
+
     # Generate a request ID
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid7()))
     
