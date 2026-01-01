@@ -13,6 +13,14 @@ Features:
 - Timezone-aware timestamps (configured in eutax.yaml)
 - Log file rotation with timestamp-based naming
 - Context-aware logging with tags and metadata
+- By default, healthcheck logs are suppressed (see below)
+
+Healthcheck log suppression:
+Docker call health endpoints frequently, and logging every healthcheck can cause high-volume, low-signal log growth.
+We suppress ONLY uvicorn access log entries for:
+ - GET /api/v1/health
+ - originating from localhost (127.0.0.1 / ::1)
+Application-level request logs are handled separately (see app/main.py middleware).
 """
 
 import os
