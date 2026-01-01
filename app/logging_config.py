@@ -32,6 +32,69 @@ from rich.logging import RichHandler
 
 from app.config.config import load_config
 
+
+def _is_localhost_client(client_addr: object) -> bool:
+    """
+    Return True if a uvicorn access log client address appears to be localhost.
+
+    `client_addr` in uvicorn.access logs is typically a string like:
+    - "127.0.0.1:54321"
+    - "::1:54321" (ipv6 loopback, format can vary)
+    """
+    if not client_addr:
+        return False
+    s = str(client_addr)
+    return ("127.0.0.1" in s) or s.startswith("::1") or ("[::1]" in s)
+
+
+class UvicornAccessHealthcheckFilter(logging.Filter):
+    """
+    Logging filter to suppress uvicorn access logs for localhost healthchecks.
+
+    Designed to be safe even if uvicorn changes the record args shape:
+    - If the record doesn't look like a uvicorn access record, we keep it.
+    """
+
+    def __init__(
+        self,
+        name: str = "",
+        *,
+        enabled: bool = True,
+        health_path: str = "/api/v1/health",
+        method: str = "GET",
+    ):
+        super().__init__(name)
+        self.enabled = enabled
+        self.health_path = health_path
+        self.method = method
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not self.enabled:
+            return True
+
+        # Only intended for uvicorn's access logger.
+        if record.name != "uvicorn.access":
+            return True
+
+        args = getattr(record, "args", None)
+        if not isinstance(args, tuple) or len(args) < 3:
+            return True
+
+        client_addr, method, path = args[0], args[1], args[2]
+        if str(method).upper() != self.method:
+            return True
+
+        # uvicorn includes query string in `path`; we match by prefix.
+        if not str(path).startswith(self.health_path):
+            return True
+
+        if not _is_localhost_client(client_addr):
+            return True
+
+        # Suppress this record
+        return False
+
+
 # Custom JSON formatter with timezone support
 class TimezoneAwareJsonFormatter(jsonlogger.JsonFormatter):
     """
@@ -116,7 +179,10 @@ def add_log_source(logger, _, event_dict):
     return event_dict
 
 # Main setup function
-def setup_logging():
+def setup_logging(
+    *,
+    suppress_localhost_healthchecks: Optional[bool] = None,
+):
     """
     Setup structured logging for the application:
     - JSON file logs with context-aware fields
@@ -133,6 +199,14 @@ def setup_logging():
     log_timezone = logging_cfg.get("timezone", None)
     backup_count = logging_cfg.get("backupCount", 14)
 
+    # Healthcheck suppression:
+    # - Default comes from env var (on by default to prevent log bloat in containers).
+    # - Can be overridden by passing an explicit argument.
+    if suppress_localhost_healthchecks is None:
+        suppress_localhost_healthchecks = (
+            os.getenv("EUTAX_SUPPRESS_LOCALHOST_HEALTHCHECK_LOGS", "true").lower() == "true"
+        )
+
     # Ensure logs directory exists
     logs_dir = Path(os.environ.get("LOG_DIR", "wd/logs"))
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -145,6 +219,14 @@ def setup_logging():
     logging_config = {
         "version": 1,
         "disable_existing_loggers": False,
+        "filters": {
+            "suppress_localhost_healthchecks": {
+                "()": "app.logging_config.UvicornAccessHealthcheckFilter",
+                "enabled": suppress_localhost_healthchecks,
+                "health_path": "/api/v1/health",
+                "method": "GET",
+            }
+        },
         "formatters": {
             "access": {
                 "()": "app.logging_config.get_access_formatter",
@@ -168,6 +250,7 @@ def setup_logging():
                 "class": "logging.StreamHandler",
                 "formatter": "access",
                 "stream": "ext://sys.stdout",
+                "filters": ["suppress_localhost_healthchecks"],
             },
             "console": {
                 "class": "rich.logging.RichHandler",
@@ -183,6 +266,7 @@ def setup_logging():
                 "when": "midnight",
                 "backupCount": backup_count,
                 "encoding": "utf-8",
+                "filters": ["suppress_localhost_healthchecks"],
             },
         },
         "loggers": {
