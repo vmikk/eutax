@@ -18,7 +18,13 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.limiter import limiter
 from slowapi.errors import RateLimitExceeded
 from app.logging_config import setup_logging, get_logger
-setup_logging()
+
+# Suppress very frequent container healthcheck logs by default.
+# Can be overridden via env var or by changing this argument.
+SUPPRESS_LOCALHOST_HEALTHCHECK_LOGS = (
+    os.getenv("EUTAX_SUPPRESS_LOCALHOST_HEALTHCHECK_LOGS", "true").lower() == "true"
+)
+setup_logging(suppress_localhost_healthchecks=SUPPRESS_LOCALHOST_HEALTHCHECK_LOGS)
 
 import structlog
 import uuid
