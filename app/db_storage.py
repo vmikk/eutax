@@ -155,3 +155,12 @@ async def get_job_by_id(job_id: str) -> Optional[Dict[str, Any]]:
             job_data['result_files'] = json.loads(job_data['result_files'])
         
         return job_data
+
+async def get_job_summary(job_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get a detailed summary for a specific job.
+
+    This is a wrapper used by the API router;
+    it returns the same structure as `get_job_by_id`.
+    """
+    return await get_job_by_id(job_id)
