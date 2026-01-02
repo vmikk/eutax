@@ -3,6 +3,11 @@ Reference database validation utilities.
 
 On startup we want to *fail fast* if reference databases are not available,
 because jobs will otherwise fail later in confusing ways.
+
+Validation checks:
+- uniqueness of database paths (files)
+- existence of database paths (files)
+- uniqueness of database names (aliases from YAML)
 """
 
 from __future__ import annotations
@@ -25,6 +30,21 @@ class MissingRefDbPath:
     refdb_id: str
     path_key: str
     configured_path: str
+    details: str
+
+
+@dataclass(frozen=True)
+class DuplicateRefDbName:
+    refdb_name: str
+    duplicate_refdb_ids: list[str]
+    details: str
+
+
+@dataclass(frozen=True)
+class DuplicateRefDbPath:
+    path: str
+    refdb_ids: list[str]
+    path_keys: list[str]
     details: str
 
 
@@ -79,13 +99,70 @@ def _iter_configured_paths(refdb_config: RefDbConfig) -> Iterable[tuple[str, str
                 yield refdb_id, key, value
 
 
-def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[MissingRefDbPath]]:
+def validate_refdb_name_uniqueness(refdb_config: RefDbConfig) -> list[DuplicateRefDbName]:
     """
-    Validate that all refdb paths referenced in refdb.yaml exist on disk.
+    Check for duplicate database names in refdb configuration.
+
+    Returns a list of DuplicateRefDbName instances for any names that appear more than once.
+    """
+    name_to_ids: dict[str, list[str]] = {}
+    for refdb_id in refdb_config.refdbs.keys():
+        name_to_ids.setdefault(refdb_id, []).append(refdb_id)
+
+    duplicates = []
+    for name, ids in name_to_ids.items():
+        if len(ids) > 1:
+            duplicates.append(DuplicateRefDbName(
+                refdb_name=name,
+                duplicate_refdb_ids=ids,
+                details=f"Database name '{name}' is used by multiple entries: {', '.join(ids)}"
+            ))
+
+    return duplicates
+
+
+def validate_refdb_path_uniqueness(refdb_config: RefDbConfig) -> list[DuplicateRefDbPath]:
+    """
+    Check for duplicate paths across different databases in refdb configuration.
+
+    Returns a list of DuplicateRefDbPath instances for any paths that appear in multiple databases.
+    """
+    path_to_usage: dict[str, list[tuple[str, str]]] = {}
+
+    for refdb_id, entry in refdb_config.refdbs.items():
+        paths = entry.paths
+        for key in ("blast", "vsearch_global", "vsearch_exact"):
+            value = getattr(paths, key, None)
+            if value:
+                path_to_usage.setdefault(value, []).append((refdb_id, key))
+
+    duplicates = []
+    for path, usages in path_to_usage.items():
+        if len(usages) > 1:
+            refdb_ids = [refdb_id for refdb_id, _ in usages]
+            path_keys = [key for _, key in usages]
+            duplicates.append(DuplicateRefDbPath(
+                path=path,
+                refdb_ids=refdb_ids,
+                path_keys=path_keys,
+                details=f"Path '{path}' is used by databases {', '.join(refdb_ids)} (keys: {', '.join(path_keys)})"
+            ))
+
+    return duplicates
+
+
+def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[MissingRefDbPath], list[DuplicateRefDbName], list[DuplicateRefDbPath]]:
+    """
+    Validate refdb configuration including:
+    - All refdb paths referenced in refdb.yaml exist on disk
+    - Database names are unique (fatal error)
+    - Paths are unique across databases (warning)
 
     Returns:
     - resolved_config_path
     - list of missing paths (empty when OK)
+    - list of duplicate names (fatal, should exit)
+    - list of duplicate paths (warning, continue)
     """
     resolved = config_path or get_refdb_config_path()
 
@@ -100,6 +177,8 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
                     details="refdb config file not found",
                 )
             ],
+            [],  # no duplicate names
+            [],  # no duplicate paths
         )
 
     try:
@@ -116,6 +195,8 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
                     details=f"failed to read/parse YAML: {type(e).__name__}: {e}",
                 )
             ],
+            [],  # no duplicate names
+            [],  # no duplicate paths
         )
 
     try:
@@ -131,8 +212,17 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
                     details=f"invalid refdb.yaml structure: {type(e).__name__}: {e}",
                 )
             ],
+            [],  # no duplicate names
+            [],  # no duplicate paths
         )
 
+    # Check for duplicate names (fatal)
+    duplicate_names = validate_refdb_name_uniqueness(parsed)
+
+    # Check for duplicate paths (warning)
+    duplicate_paths = validate_refdb_path_uniqueness(parsed)
+
+    # Check for missing paths
     missing: list[MissingRefDbPath] = []
     for refdb_id, key, path in _iter_configured_paths(parsed):
         if key == "blast":
@@ -151,7 +241,7 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
                 )
             )
 
-    return resolved, missing
+    return resolved, missing, duplicate_names, duplicate_paths
 
 
 def _format_startup_failure(
@@ -182,7 +272,7 @@ def _format_startup_failure(
 
 def ensure_refdbs_available_or_exit(*, logger=None, colors=None) -> None:
     """
-    Validate refdb availability and exit the process if missing.
+    Validate refdb availability and exit the process if missing or invalid.
     Intended to be called during API startup.
     """
     # Allow being called without importing main.py (colors is optional).
@@ -192,40 +282,96 @@ def ensure_refdbs_available_or_exit(*, logger=None, colors=None) -> None:
 
     colors = colors or _NoColors()
 
-    resolved, missing = validate_refdb_files()
-    if not missing:
-        return
+    resolved, missing, duplicate_names, duplicate_paths = validate_refdb_files()
 
-    msg = _format_startup_failure(colors=colors, resolved_config_path=resolved, missing=missing)
-    print(msg, file=sys.stderr)
-    try:
-        sys.stderr.flush()
-    except Exception:
-        pass
+    # Handle duplicate names (fatal error)
+    if duplicate_names:
+        print(f"{colors.RED}FATAL: Reference database configuration contains duplicate names — refusing to start.{colors.RESET}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Duplicate database names found:", file=sys.stderr)
+        for item in duplicate_names:
+            print(f"  - {item.details}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("How to fix:", file=sys.stderr)
+        print("  - Edit refdb.yaml to ensure all database names are unique.", file=sys.stderr)
+        print("", file=sys.stderr)
 
-    if logger is not None:
-        logger.error(
-            "Reference DB validation failed; exiting",
-            event_type="startup_refdb_validation_failed",
-            refdb_config_path=resolved,
-            missing=[item.__dict__ for item in missing],
-        )
+        if logger is not None:
+            logger.error(
+                "Reference DB validation failed - duplicate names; exiting",
+                event_type="startup_refdb_validation_failed",
+                refdb_config_path=resolved,
+                duplicate_names=[item.__dict__ for item in duplicate_names],
+            )
+        os._exit(2)
 
-    # In FastAPI/Starlette lifespan, raising SystemExit/Exception causes an
-    # "ERROR: Traceback ..." log which looks like an application crash.
-    # We intentionally terminate the process *without* raising, to keep logs clean.
-    os._exit(2)
+    # Handle duplicate paths (warning only)
+    if duplicate_paths:
+        print(f"{colors.RED}WARNING: Reference database configuration contains duplicate paths.{colors.RESET}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Duplicate paths found:", file=sys.stderr)
+        for item in duplicate_paths:
+            print(f"  - {item.details}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Note: This may be intentional but could indicate configuration errors.", file=sys.stderr)
+        print("", file=sys.stderr)
+
+        if logger is not None:
+            logger.warning(
+                "Reference DB validation - duplicate paths detected",
+                event_type="startup_refdb_validation_duplicate_paths",
+                refdb_config_path=resolved,
+                duplicate_paths=[item.__dict__ for item in duplicate_paths],
+            )
+
+    # Handle missing paths (fatal error)
+    if missing:
+        msg = _format_startup_failure(colors=colors, resolved_config_path=resolved, missing=missing)
+        print(msg, file=sys.stderr)
+        try:
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+        if logger is not None:
+            logger.error(
+                "Reference DB validation failed - missing files; exiting",
+                event_type="startup_refdb_validation_failed",
+                refdb_config_path=resolved,
+                missing=[item.__dict__ for item in missing],
+            )
+
+        # In FastAPI/Starlette lifespan, raising SystemExit/Exception causes an
+        # "ERROR: Traceback ..." log which looks like an application crash.
+        # We intentionally terminate the process *without* raising, to keep logs clean.
+        os._exit(2)
 
 
 def main() -> None:
-    resolved, missing = validate_refdb_files()
+    resolved, missing, duplicate_names, duplicate_paths = validate_refdb_files()
+
+    # Check for fatal errors first
+    if duplicate_names:
+        print(f"refdb validation FAILED - duplicate names (config: {resolved})", file=sys.stderr)
+        for item in duplicate_names:
+            print(f"- {item.details}", file=sys.stderr)
+        raise SystemExit(2)
+
+    if duplicate_paths:
+        print(f"refdb validation WARNING - duplicate paths (config: {resolved})", file=sys.stderr)
+        for item in duplicate_paths:
+            print(f"- WARNING: {item.details}", file=sys.stderr)
+
     if missing:
-        # Minimal plain output for CLI usage
-        print(f"refdb validation FAILED (config: {resolved})", file=sys.stderr)
+        print(f"refdb validation FAILED - missing files (config: {resolved})", file=sys.stderr)
         for item in missing:
             print(f"- {item.refdb_id}:{item.path_key} -> {item.configured_path} ({item.details})", file=sys.stderr)
         raise SystemExit(2)
-    print(f"refdb validation OK (config: {resolved})")
+
+    if duplicate_paths:
+        print(f"refdb validation OK with warnings (config: {resolved})")
+    else:
+        print(f"refdb validation OK (config: {resolved})")
 
 
 if __name__ == "__main__":
