@@ -1,7 +1,7 @@
 
 ### --- Builder stage ---
 
-FROM python:3.12.10-slim AS builder
+FROM python:3.14-slim AS builder
 
 ## Install system dependencies
 RUN apt-get update \
@@ -10,21 +10,21 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* /var/cache/debconf/templates.dat* /tmp/* /var/tmp/*
 
 ## Install BLAST
-RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.16.0+-x64-linux.tar.gz' \
+RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.17.0+-x64-linux.tar.gz' \
   && tar -xzf "blast.tar.gz" \
   && rm -f "blast.tar.gz" \
-  && mv ncbi-blast-2.16.0+/bin/* /usr/local/bin/ \
-  && rm -rf ncbi-blast-2.16.0+
+  && mv ncbi-blast-2.17.0+/bin/* /usr/local/bin/ \
+  && rm -rf ncbi-blast-2.17.0+
 
 ## Install VSEARCH
-RUN wget -O "vsearch.tar.gz" 'https://github.com/torognes/vsearch/releases/download/v2.30.0/vsearch-2.30.0-linux-x86_64.tar.gz' \
+RUN wget -O "vsearch.tar.gz" 'https://github.com/torognes/vsearch/releases/download/v2.30.2/vsearch-2.30.2-linux-x86_64.tar.gz' \
   && tar -xzf "vsearch.tar.gz" \
   && rm -f "vsearch.tar.gz" \
-  && mv vsearch-2.30.0-linux-x86_64/bin/vsearch /usr/local/bin/ \
-  && rm -rf vsearch-2.30.0-linux-x86_64
+  && mv vsearch-2.30.2-linux-x86_64/bin/vsearch /usr/local/bin/ \
+  && rm -rf vsearch-2.30.2-linux-x86_64
 
 ## Add lf
-RUN wget https://github.com/gokcehan/lf/releases/download/r34/lf-linux-amd64.tar.gz \
+RUN wget https://github.com/gokcehan/lf/releases/download/r40/lf-linux-amd64.tar.gz \
   && tar -xvf lf-linux-amd64.tar.gz \
   && mv lf /usr/local/bin/ \
   && rm -f lf-linux-amd64.tar.gz
@@ -44,17 +44,17 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && pip cache purge \
     && find /usr/local -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true \
     && find /usr/local -type d -name "examples" -exec rm -rf {} + 2>/dev/null || true \
-    && find /usr/local/lib/python3.12/site-packages/pip/_vendor/distlib -name "*-arm.exe" -delete
+    && find /usr/local/lib/python3.*/site-packages/pip/_vendor/distlib -name "*-arm.exe" -delete
     # && find /usr/local -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true \
-    # && find /usr/local/lib/python3.12/site-packages -name "*.pyc" -delete
+    # && find /usr/local/lib/python3.*/site-packages -name "*.pyc" -delete
 
 
 ### --- Runtime stage ---
 
-FROM python:3.12.10-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 RUN apt-get update \
-  && apt-get install -y less wget curl libgomp1 \
+  && apt-get install -y less wget curl libgomp1 zip \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /var/cache/debconf/templates.dat* /tmp/* /var/tmp/*
 
@@ -62,7 +62,7 @@ RUN apt-get update \
 WORKDIR /app
 
 ## Copy installed packages from builder stage
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 ## Copy application code
