@@ -99,23 +99,45 @@ def _iter_configured_paths(refdb_config: RefDbConfig) -> Iterable[tuple[str, str
                 yield refdb_id, key, value
 
 
-def validate_refdb_name_uniqueness(refdb_config: RefDbConfig) -> list[DuplicateRefDbName]:
+def validate_refdb_name_uniqueness_raw(yaml_content: str) -> list[DuplicateRefDbName]:
     """
-    Check for duplicate database names in refdb configuration.
+    Check for duplicate database names by parsing raw YAML content.
+    This catches duplicates that YAML parser would silently resolve.
 
     Returns a list of DuplicateRefDbName instances for any names that appear more than once.
     """
-    name_to_ids: dict[str, list[str]] = {}
-    for refdb_id in refdb_config.refdbs.keys():
-        name_to_ids.setdefault(refdb_id, []).append(refdb_id)
+    import re
+
+    # Find all database names under refdbs: section
+    # This regex looks for lines like "  database_name:" under refdbs:
+    refdb_pattern = re.compile(r'^refdbs:\s*$', re.MULTILINE)
+    db_name_pattern = re.compile(r'^\s{2}([^:\s]+):', re.MULTILINE)
+
+    refdb_match = refdb_pattern.search(yaml_content)
+    if not refdb_match:
+        return []
+
+    # Extract content after refdbs:
+    content_after_refdbs = yaml_content[refdb_match.end():]
+
+    # Find all database names (non-indented keys)
+    db_names = []
+    for match in db_name_pattern.finditer(content_after_refdbs):
+        db_name = match.group(1)
+        db_names.append(db_name)
+
+    # Check for duplicates
+    name_counts = {}
+    for name in db_names:
+        name_counts[name] = name_counts.get(name, 0) + 1
 
     duplicates = []
-    for name, ids in name_to_ids.items():
-        if len(ids) > 1:
+    for name, count in name_counts.items():
+        if count > 1:
             duplicates.append(DuplicateRefDbName(
                 refdb_name=name,
-                duplicate_refdb_ids=ids,
-                details=f"Database name '{name}' is used by multiple entries: {', '.join(ids)}"
+                duplicate_refdb_ids=[name] * count,  # List with name repeated 'count' times
+                details=f"Database name '{name}' appears {count} times in the YAML file"
             ))
 
     return duplicates
@@ -181,9 +203,10 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
             [],  # no duplicate paths
         )
 
+    # Read raw YAML content for duplicate name validation
     try:
         with open(resolved, "r") as f:
-            raw = yaml.safe_load(f) or {}
+            yaml_content = f.read()
     except Exception as e:
         return (
             resolved,
@@ -192,10 +215,30 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
                     refdb_id="__config__",
                     path_key="refdb.yaml",
                     configured_path=resolved,
-                    details=f"failed to read/parse YAML: {type(e).__name__}: {e}",
+                    details=f"failed to read YAML file: {type(e).__name__}: {e}",
                 )
             ],
             [],  # no duplicate names
+            [],  # no duplicate paths
+        )
+
+    # Check for duplicate names in raw YAML (fatal - catches duplicates before parsing)
+    duplicate_names = validate_refdb_name_uniqueness_raw(yaml_content)
+
+    try:
+        raw = yaml.safe_load(yaml_content) or {}
+    except Exception as e:
+        return (
+            resolved,
+            [
+                MissingRefDbPath(
+                    refdb_id="__config__",
+                    path_key="refdb.yaml",
+                    configured_path=resolved,
+                    details=f"failed to parse YAML: {type(e).__name__}: {e}",
+                )
+            ],
+            duplicate_names,  # include any duplicate names found
             [],  # no duplicate paths
         )
 
@@ -212,12 +255,9 @@ def validate_refdb_files(config_path: str | None = None) -> tuple[str, list[Miss
                     details=f"invalid refdb.yaml structure: {type(e).__name__}: {e}",
                 )
             ],
-            [],  # no duplicate names
+            duplicate_names,  # include any duplicate names found
             [],  # no duplicate paths
         )
-
-    # Check for duplicate names (fatal)
-    duplicate_names = validate_refdb_name_uniqueness(parsed)
 
     # Check for duplicate paths (warning)
     duplicate_paths = validate_refdb_path_uniqueness(parsed)
