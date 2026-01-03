@@ -297,6 +297,7 @@ class APITester:
         results_table.add_column("Job ID", style="blue")
         results_table.add_column("Status", style="green")
         results_table.add_column("Results", style="yellow")
+        results_table.add_column("CPU Time (s)", style="magenta")
         
         # Run tests for each parameter combination
         for case in test_cases:
@@ -320,7 +321,26 @@ class APITester:
                     results_status = "Downloaded"
                 else:
                     results_status = "Failed to download"
-         
+
+            # Retrieve CPU time from job summary
+            cpu_time_value = "N/A"
+            if status == "finished":
+                try:
+                    response = requests.get(f"{self.base_url}/api/v1/jobs/{job_id}/summary", headers=self.headers)
+                    if response.status_code == 200:
+                        summary_data = response.json()
+                        cpu_time_val = summary_data.get("cpu_time_seconds")
+                        if cpu_time_val is not None:
+                            cpu_time_value = str(cpu_time_val)
+                    else:
+                        self.print_failure(f"Failed to retrieve job summary for job {job_id} - status code: {response.status_code}")
+                except Exception as e:
+                    self.print_failure(f"Job summary request failed: {str(e)}")
+            self.print_info(f"CPU time for job {job_id}: {cpu_time_value} seconds")
+
+            # Add to results table with CPU time
+            results_table.add_row(tool, algorithm, database, job_id, status or "unknown", results_status, cpu_time_value)
+            
             # Add short delay between tests
             time.sleep(1)
         
