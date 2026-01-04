@@ -3,6 +3,19 @@
 # Taxonomic annotation API tester
 # (tests the API endpoints and parameter combinations)
 
+## Usage:
+# mamba run -n EUTAXTEST \
+# python \
+#   ./tests/test_api.py \
+#   --test-data ./tests/seqs/sequences.fasta
+# Optional parameters:
+# --url      : API server URL (default: http://localhost:8000)
+# --api-key  : API key for authentication (default: "abcd")
+
+## Conda environment:
+# mamba create -y -n EUTAXTEST -f requirements_test.txt python=3.14
+##    biopython=1.86 rich=14.2.0 pyyaml=6.0.3 requests=2.32.5
+# conda activate EUTAXTEST
 
 import argparse
 import json
