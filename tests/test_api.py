@@ -9,8 +9,9 @@
 #   ./tests/test_api.py \
 #   --test-data ./tests/seqs/sequences.fasta
 # Optional parameters:
-# --url      : API server URL (default: http://localhost:8000)
-# --api-key  : API key for authentication (default: "abcd")
+# --url        : API server URL (default: http://localhost:8000)
+# --api-key    : API key for authentication (default: "abcd")
+# --output-dir : Output directory for test results (default: current directory)
 
 ## Conda environment:
 # mamba create -y -n EUTAXTEST -f requirements_test.txt python=3.14
@@ -35,16 +36,17 @@ from rich.box import MINIMAL
 
 
 class APITester:
-    def __init__(self, base_url: str, api_key: str, test_data_path: str):
+    def __init__(self, base_url: str, api_key: str, test_data_path: str, output_dir: str = "."):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.test_data_path = test_data_path
+        self.output_dir = output_dir
         self.console = Console()
         self.headers = {"X-API-KEY": api_key}
         self.results: Dict[str, Dict] = {}
-        
+
         # Create results directory if it doesn't exist
-        os.makedirs("test_results", exist_ok=True)
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def print_header(self, text: str):
         """Print a section header with rich formatting"""
@@ -257,7 +259,7 @@ class APITester:
                 results_data = response.json()
                 
                 # Save results to file
-                results_file = f"test_results/job_{job_id}_results.json"
+                results_file = os.path.join(self.output_dir, f"job_{job_id}_results.json")
                 with open(results_file, "w") as f:
                     json.dump(results_data, f, indent=2)
                 
@@ -361,7 +363,7 @@ class APITester:
         self.console.print(results_table)
         
         # Write summary to file
-        summary_file = f"test_results/test_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        summary_file = os.path.join(self.output_dir, f"test_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
         with open(summary_file, "w") as f:
             f.write(f"API Test Summary - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Server: {self.base_url}\n")
@@ -378,10 +380,11 @@ def main():
     parser.add_argument("--url", default="http://localhost:8000", help="Base URL of the API server")
     parser.add_argument("--api-key", default="abcd", help="API key for authentication")
     parser.add_argument("--test-data", required=True, help="Path to FASTA file for testing")
-    
+    parser.add_argument("--output-dir", default=".", help="Output directory for test results (default: current directory)")
+
     args = parser.parse_args()
-    
-    tester = APITester(args.url, args.api_key, args.test_data)
+
+    tester = APITester(args.url, args.api_key, args.test_data, args.output_dir)
     tester.run_parameter_test_suite(args.test_data)
 
 
