@@ -17,14 +17,14 @@ RUN wget -O "blast.tar.gz" 'https://ftp.ncbi.nlm.nih.gov/blast/executables/blast
   && rm -rf ncbi-blast-2.17.0+
 
 ## Install VSEARCH
-RUN wget -O "vsearch.tar.gz" 'https://github.com/torognes/vsearch/releases/download/v2.30.2/vsearch-2.30.2-linux-x86_64.tar.gz' \
+RUN wget -O "vsearch.tar.gz" 'https://github.com/torognes/vsearch/releases/download/v2.31.0/vsearch-2.31.0-linux-x86_64.tar.gz' \
   && tar -xzf "vsearch.tar.gz" \
   && rm -f "vsearch.tar.gz" \
-  && mv vsearch-2.30.2-linux-x86_64/bin/vsearch /usr/local/bin/ \
-  && rm -rf vsearch-2.30.2-linux-x86_64
+  && mv vsearch-2.31.0-linux-x86_64/bin/vsearch /usr/local/bin/ \
+  && rm -rf vsearch-2.31.0-linux-x86_64
 
 ## Add lf
-RUN wget https://github.com/gokcehan/lf/releases/download/r40/lf-linux-amd64.tar.gz \
+RUN wget https://github.com/gokcehan/lf/releases/download/r41/lf-linux-amd64.tar.gz \
   && tar -xvf lf-linux-amd64.tar.gz \
   && mv lf /usr/local/bin/ \
   && rm -f lf-linux-amd64.tar.gz
